@@ -223,18 +223,26 @@ function App() {
   }
 
   function clearDateContent(recordId: string) {
-    if (!window.confirm("确定删掉这个日期下的所有内容吗？")) {
+    const record = records.find((item) => item.id === recordId);
+    if (!record) {
       return;
     }
 
-    updateRecord(recordId, (record) => ({
-      ...record,
-      exercises: [],
-    }));
+    if (!window.confirm(`确定删掉 ${record.date} 这一天的整张记录吗？`)) {
+      return;
+    }
+
+    setRecords((current) => current.filter((item) => item.id !== recordId));
   }
 
   function removeExercise(recordId: string, exerciseId: string) {
-    if (!window.confirm("确定删掉这个日期下的这个动作吗？")) {
+    const record = records.find((item) => item.id === recordId);
+    const exercise = record?.exercises.find((item) => item.id === exerciseId);
+    if (!record || !exercise) {
+      return;
+    }
+
+    if (!window.confirm(`确定删掉 ${record.date} 的动作“${exercise.name}”吗？`)) {
       return;
     }
 
@@ -245,7 +253,15 @@ function App() {
   }
 
   function removeLoadGroup(recordId: string, exerciseId: string, loadGroupId: string) {
-    if (!window.confirm("确定删掉这个动作下的这条负载记录吗？")) {
+    const record = records.find((item) => item.id === recordId);
+    const exercise = record?.exercises.find((item) => item.id === exerciseId);
+    const group = exercise?.loadGroups.find((item) => item.id === loadGroupId);
+    if (!record || !exercise || !group) {
+      return;
+    }
+
+    const label = group.label || "默认";
+    if (!window.confirm(`确定删掉 ${record.date} 的“${exercise.name}”里负载“${label}”这一行吗？`)) {
       return;
     }
 

@@ -296,17 +296,17 @@ input:focus {
 }
 
 .collapse-button {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  font-size: 1.18rem;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  font-size: 1.45rem;
 }
 
 .exercise-collapse-button {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  font-size: 1rem;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  font-size: 1.25rem;
 }
 
 .date-add-button,
