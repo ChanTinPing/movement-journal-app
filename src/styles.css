@@ -14,6 +14,9 @@
   --text-soft: #6a645c;
   --accent: #355c49;
   --accent-soft: #edf3ef;
+  --date-accent: #355c49;
+  --exercise-accent: #8a6233;
+  --collapse-accent: #5e6158;
 }
 
 * {
@@ -183,6 +186,14 @@ input:focus {
   gap: 0.45rem;
 }
 
+.load-content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
 .history-load-row p,
 .muted {
   margin: 0;
@@ -198,9 +209,9 @@ input:focus {
 }
 
 .load-label {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   min-width: 3.4rem;
-  margin-right: 0.55rem;
   color: var(--accent);
   font-weight: 700;
 }
@@ -216,36 +227,44 @@ input:focus {
 }
 
 .date-add-button {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  background: rgba(53, 92, 73, 0.12);
-  color: var(--accent);
-  font-size: 1.2rem;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  background: rgba(53, 92, 73, 0.15);
+  color: var(--date-accent);
+  font-size: 1.45rem;
+  font-weight: 700;
 }
 
 .exercise-add-button {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  background: transparent;
-  color: var(--accent);
-  font-size: 1.1rem;
-  border: 1px solid rgba(53, 92, 73, 0.16);
-}
-
-.entry-add-button,
-.collapse-button {
   width: 30px;
   height: 30px;
   flex: 0 0 30px;
-  background: rgba(53, 92, 73, 0.08);
-  color: var(--accent);
-  font-size: 1rem;
+  background: rgba(138, 98, 51, 0.08);
+  color: var(--exercise-accent);
+  font-size: 1.2rem;
+  font-weight: 700;
+  border: 1px solid rgba(138, 98, 51, 0.2);
+}
+
+.entry-add-button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  background: rgba(53, 92, 73, 0.1);
+  color: var(--date-accent);
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
 .collapse-button {
-  font-size: 0.9rem;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  background: rgba(94, 97, 88, 0.12);
+  color: var(--collapse-accent);
+  font-size: 1.15rem;
+  font-weight: 700;
 }
 
 .quick-add-row {
@@ -272,6 +291,8 @@ input:focus {
   align-items: center;
   gap: 0.3rem;
   min-height: 1.8rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .entry-chip-button {
@@ -280,6 +301,7 @@ input:focus {
   background: transparent;
   color: #2d3d36;
   font-size: 1rem;
+  line-height: 1.25;
 }
 
 .entry-chip-button:not(:last-child)::after {

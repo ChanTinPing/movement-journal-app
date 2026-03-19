@@ -360,9 +360,64 @@ function App() {
                             {exercise.loadGroups.map((group) => (
                               <div className="history-load-block" key={group.id}>
                                 <div className="history-load-row">
-                                  <p>
-                                    {group.label ? <span className="load-label">{group.label}</span> : "\u00A0"}
-                                  </p>
+                                  <div className="load-content">
+                                    <span className="load-label spacer-label">
+                                      {group.label || ""}
+                                    </span>
+                                    <div className="entry-edit-row">
+                                      {group.entries.length > 0
+                                        ? group.entries.map((entry, entryIndex) => {
+                                            const entryId = `edit-${group.id}-${entryIndex}`;
+                                            const isEditing =
+                                              editingEntryTarget === entryId;
+
+                                            return isEditing ? (
+                                              <input
+                                                key={entryId}
+                                                className="entry-inline-input"
+                                                value={entryDrafts[entryId] ?? ""}
+                                                onChange={(event) =>
+                                                  setEntryDrafts((current) => ({
+                                                    ...current,
+                                                    [entryId]: event.target.value,
+                                                  }))
+                                                }
+                                                onBlur={() =>
+                                                  saveEditedEntry(
+                                                    record.id,
+                                                    exercise.id,
+                                                    group.id,
+                                                    entryIndex,
+                                                  )
+                                                }
+                                                onKeyDown={(event) => {
+                                                  if (event.key === "Enter") {
+                                                    event.preventDefault();
+                                                    saveEditedEntry(
+                                                      record.id,
+                                                      exercise.id,
+                                                      group.id,
+                                                      entryIndex,
+                                                    );
+                                                  }
+                                                }}
+                                                autoFocus
+                                              />
+                                            ) : (
+                                              <button
+                                                key={entryId}
+                                                className="entry-chip-button"
+                                                onClick={() =>
+                                                  startEditingEntry(entryId, entry)
+                                                }
+                                              >
+                                                {entry}
+                                              </button>
+                                            );
+                                          })
+                                        : null}
+                                    </div>
+                                  </div>
                                   <button
                                     className="entry-add-button"
                                     onClick={() =>
@@ -405,57 +460,6 @@ function App() {
                                     </button>
                                   </div>
                                 ) : null}
-
-                                <div className="entry-edit-row">
-                                  {group.entries.length > 0
-                                    ? group.entries.map((entry, entryIndex) => {
-                                        const entryId = `edit-${group.id}-${entryIndex}`;
-                                        const isEditing = editingEntryTarget === entryId;
-
-                                        return isEditing ? (
-                                          <input
-                                            key={entryId}
-                                            className="entry-inline-input"
-                                            value={entryDrafts[entryId] ?? ""}
-                                            onChange={(event) =>
-                                              setEntryDrafts((current) => ({
-                                                ...current,
-                                                [entryId]: event.target.value,
-                                              }))
-                                            }
-                                            onBlur={() =>
-                                              saveEditedEntry(
-                                                record.id,
-                                                exercise.id,
-                                                group.id,
-                                                entryIndex,
-                                              )
-                                            }
-                                            onKeyDown={(event) => {
-                                              if (event.key === "Enter") {
-                                                event.preventDefault();
-                                                saveEditedEntry(
-                                                  record.id,
-                                                  exercise.id,
-                                                  group.id,
-                                                  entryIndex,
-                                                );
-                                              }
-                                            }}
-                                            autoFocus
-                                          />
-                                        ) : (
-                                          <button
-                                            key={entryId}
-                                            className="entry-chip-button"
-                                            onClick={() => startEditingEntry(entryId, entry)}
-                                          >
-                                            {entry}
-                                          </button>
-                                        );
-                                      })
-                                    : null}
-                                </div>
                               </div>
                             ))}
                           </div>
