@@ -108,6 +108,17 @@ input:focus {
   padding: 0 1rem 1.2rem;
 }
 
+.month-section + .month-section {
+  margin-top: 1.1rem;
+}
+
+.month-heading {
+  margin: 0 0 0.55rem 0.2rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
 .history-list {
   display: grid;
   gap: 1rem;
@@ -161,6 +172,8 @@ input:focus {
 .card-tools {
   color: var(--text-soft);
   white-space: nowrap;
+  width: 6.25rem;
+  justify-content: space-between;
 }
 
 .history-card__items {
@@ -194,6 +207,19 @@ input:focus {
   min-width: 3.5rem;
   color: var(--green-strong);
   font-weight: 700;
+}
+
+.load-label-button,
+.load-inline-input {
+  min-width: 3.5rem;
+}
+
+.load-label-button {
+  padding: 0;
+  background: transparent;
+  color: var(--green-strong);
+  font-weight: 700;
+  text-align: left;
 }
 
 .load-inline-group {
@@ -261,6 +287,24 @@ input:focus {
   color: white;
 }
 
+.quick-add-stack {
+  margin-top: 0.55rem;
+}
+
+.load-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.load-preset-button {
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  background: rgba(46, 107, 83, 0.1);
+  color: var(--green-strong);
+}
+
 .muted {
   margin: 0;
   color: var(--text-soft);
@@ -303,10 +347,12 @@ input:focus {
 
 .date-add-button,
 .date-delete-button {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
+  width: auto;
+  height: auto;
+  flex: 0 0 auto;
+  padding: 0 0.05rem;
   font-size: 1.5rem;
+  border-radius: 0;
 }
 
 .exercise-add-button,
@@ -341,9 +387,9 @@ input:focus {
 }
 
 .exercise-collapse-button {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
   font-size: 1.85rem;
   line-height: 0.8;
   font-weight: 900;
@@ -352,7 +398,7 @@ input:focus {
 .date-add-button,
 .exercise-add-button,
 .entry-add-button {
-  background: var(--red-soft);
+  background: transparent;
   color: var(--red-strong);
 }
 
@@ -377,11 +423,17 @@ input:focus {
 }
 
 .today-add-button {
-  margin-top: 0.85rem;
+  margin-top: 0;
   border-radius: 18px;
   padding: 0.78rem 1rem;
   background: rgba(46, 107, 83, 0.1);
   color: var(--green-strong);
+}
+
+.today-add-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 1.6rem 0 0.6rem;
 }
 
 @media (max-width: 520px) {
