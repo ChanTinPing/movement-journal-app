@@ -382,9 +382,10 @@ input:focus {
   width: auto;
   height: auto;
   flex: 0 0 auto;
-  padding: 0 0.05rem;
-  font-size: 1.5rem;
+  padding: 0;
+  font-size: 2.5rem;
   border-radius: 0;
+  line-height: 0.9;
 }
 
 .exercise-add-button,
@@ -438,9 +439,9 @@ input:focus {
 }
 
 .collapse-button.is-expanded > span {
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-bottom: 16px solid var(--green-strong);
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-bottom: 20px solid var(--green-strong);
 }
 
 .collapse-button.is-collapsed > span {
@@ -464,21 +465,22 @@ input:focus {
 .date-add-button,
 .exercise-add-button,
 .entry-add-button {
-  color: var(--red-strong);
+  color: var(--green-strong);
 }
 
 .date-add-button {
   background: transparent;
+  transform: translateY(-0.08em);
 }
 
 .exercise-add-button {
-  background: rgba(220, 122, 62, 0.14);
-  color: #d46028;
+  background: var(--green-soft);
+  color: var(--green-strong);
 }
 
 .entry-add-button {
-  background: rgba(200, 67, 52, 0.14);
-  color: var(--red-mid);
+  background: var(--gold-soft);
+  color: var(--gold-strong);
 }
 
 .date-delete-button,
@@ -490,7 +492,7 @@ input:focus {
 
 .exercise-add-button,
 .exercise-delete-button {
-  border: 1px solid rgba(212, 96, 40, 0.2);
+  border: 1px solid rgba(46, 107, 83, 0.18);
 }
 
 .exercise-title-row {
