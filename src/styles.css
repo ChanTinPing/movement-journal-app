@@ -120,7 +120,7 @@ input:focus {
 .month-heading {
   margin: 0 0 0.65rem;
   padding: 0.78rem 1rem;
-  font-size: 1.56rem;
+  font-size: 1.7rem;
   font-weight: 700;
   color: rgba(255, 249, 238, 0.96);
   background: linear-gradient(135deg, #304e43, #3d6657);
@@ -409,6 +409,8 @@ input:focus {
 .exercise-collapse-button {
   background: transparent;
   color: var(--green-strong);
+  position: relative;
+  font-size: 0;
 }
 
 .collapse-button {
@@ -416,9 +418,6 @@ input:focus {
   height: 40px;
   flex: 0 0 40px;
   justify-self: center;
-  font-size: 2.55rem;
-  line-height: 0.8;
-  font-weight: 900;
 }
 
 .exercise-collapse-button {
@@ -426,9 +425,40 @@ input:focus {
   height: 40px;
   flex: 0 0 40px;
   justify-self: center;
-  font-size: 1.85rem;
-  line-height: 0.8;
-  font-weight: 900;
+}
+
+.collapse-button > span,
+.exercise-collapse-button > span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform: translate(-50%, -50%);
+}
+
+.collapse-button.is-expanded > span {
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 16px solid var(--green-strong);
+}
+
+.collapse-button.is-collapsed > span {
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 16px solid var(--green-strong);
+}
+
+.exercise-collapse-button.is-expanded > span {
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 13px solid var(--green-strong);
+}
+
+.exercise-collapse-button.is-collapsed > span {
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 13px solid var(--green-strong);
 }
 
 .date-add-button,
@@ -468,7 +498,7 @@ input:focus {
 }
 
 .entry-add-button--tail {
-  margin-left: 0;
+  margin-left: 0.32rem;
 }
 
 .today-add-button {

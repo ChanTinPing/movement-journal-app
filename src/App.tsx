@@ -427,9 +427,17 @@ function App() {
                           </button>
                         </div>
                         <span className="record-count">{record.exercises.length} 个动作</span>
-                        <button className="collapse-button" onClick={() => toggleDate(record.id)}>
-                          {collapsedDates[record.id] ? "▾" : "▴"}
-                        </button>
+                          <button
+                            className={
+                              collapsedDates[record.id]
+                                ? "collapse-button is-collapsed"
+                                : "collapse-button is-expanded"
+                            }
+                            onClick={() => toggleDate(record.id)}
+                            aria-label={collapsedDates[record.id] ? "展开" : "收起"}
+                          >
+                            <span aria-hidden="true" />
+                          </button>
                       </div>
 
                       {addExerciseTarget === record.id && !deleteMode ? (
@@ -486,10 +494,15 @@ function App() {
                                   </div>
                                   <span className="row-meta-spacer" />
                                   <button
-                                    className="exercise-collapse-button"
+                                    className={
+                                      collapsedExercises[exercise.id]
+                                        ? "exercise-collapse-button is-collapsed"
+                                        : "exercise-collapse-button is-expanded"
+                                    }
                                     onClick={() => toggleExercise(exercise.id)}
+                                    aria-label={collapsedExercises[exercise.id] ? "展开" : "收起"}
                                   >
-                                    {collapsedExercises[exercise.id] ? "▾" : "▴"}
+                                    <span aria-hidden="true" />
                                   </button>
                                 </div>
                               </div>
@@ -540,7 +553,7 @@ function App() {
 
                                   <div className="history-exercise__loads">
                                     {exercise.loadGroups.length === 0 ? (
-                                      <p className="muted">这个动作还没有负载</p>
+                                      <p className="muted">还没有记录</p>
                                     ) : (
                                       exercise.loadGroups.map((group) => (
                                         <div className="history-load-block" key={group.id}>
