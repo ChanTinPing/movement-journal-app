@@ -487,12 +487,14 @@ function App() {
                                       {deleteMode ? "−" : "+"}
                                     </button>
                                   </div>
-                                  <button
-                                    className="exercise-collapse-button"
-                                    onClick={() => toggleExercise(exercise.id)}
-                                  >
-                                    {collapsedExercises[exercise.id] ? "▾" : "▴"}
-                                  </button>
+                                  <div className="exercise-right-tools">
+                                    <button
+                                      className="exercise-collapse-button"
+                                      onClick={() => toggleExercise(exercise.id)}
+                                    >
+                                      {collapsedExercises[exercise.id] ? "▾" : "▴"}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
 
@@ -548,26 +550,53 @@ function App() {
                                         <div className="history-load-block" key={group.id}>
                                           <div className="history-load-row">
                                             {editingLoadTarget === group.id ? (
-                                              <input
-                                                className="load-inline-input"
-                                                value={loadDrafts[`edit-load-${group.id}`] ?? ""}
-                                                onChange={(event) =>
-                                                  setLoadDrafts((current) => ({
-                                                    ...current,
-                                                    [`edit-load-${group.id}`]: event.target.value,
-                                                  }))
-                                                }
-                                                onBlur={() =>
-                                                  saveEditedLoad(record.id, exercise.id, group.id)
-                                                }
-                                                onKeyDown={(event) => {
-                                                  if (event.key === "Enter") {
-                                                    event.preventDefault();
-                                                    saveEditedLoad(record.id, exercise.id, group.id);
+                                              <div className="load-edit-stack">
+                                                <input
+                                                  className="load-inline-input"
+                                                  value={loadDrafts[`edit-load-${group.id}`] ?? ""}
+                                                  onChange={(event) =>
+                                                    setLoadDrafts((current) => ({
+                                                      ...current,
+                                                      [`edit-load-${group.id}`]:
+                                                        event.target.value,
+                                                    }))
                                                   }
-                                                }}
-                                                autoFocus
-                                              />
+                                                  onBlur={() =>
+                                                    saveEditedLoad(
+                                                      record.id,
+                                                      exercise.id,
+                                                      group.id,
+                                                    )
+                                                  }
+                                                  onKeyDown={(event) => {
+                                                    if (event.key === "Enter") {
+                                                      event.preventDefault();
+                                                      saveEditedLoad(
+                                                        record.id,
+                                                        exercise.id,
+                                                        group.id,
+                                                      );
+                                                    }
+                                                  }}
+                                                  autoFocus
+                                                />
+                                                <div className="load-presets load-presets--inline">
+                                                  <button
+                                                    className="load-preset-button"
+                                                    onMouseDown={(event) =>
+                                                      event.preventDefault()
+                                                    }
+                                                    onClick={() => {
+                                                      setLoadDrafts((current) => ({
+                                                        ...current,
+                                                        [`edit-load-${group.id}`]: "默认",
+                                                      }));
+                                                    }}
+                                                  >
+                                                    默认
+                                                  </button>
+                                                </div>
+                                              </div>
                                             ) : (
                                               <button
                                                 className="load-label-button"

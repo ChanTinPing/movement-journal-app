@@ -75,6 +75,8 @@ input:focus {
   box-shadow: var(--card-shadow);
   backdrop-filter: blur(12px);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-header {
@@ -106,6 +108,9 @@ input:focus {
 
 .screen-body {
   padding: 0 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .month-section + .month-section {
@@ -113,10 +118,14 @@ input:focus {
 }
 
 .month-heading {
-  margin: 0 0 0.55rem 0.2rem;
-  font-size: 1rem;
+  margin: 0 0 0.65rem;
+  padding: 0.78rem 1rem;
+  font-size: 1.12rem;
   font-weight: 700;
-  color: var(--text-soft);
+  color: rgba(255, 249, 238, 0.96);
+  background: linear-gradient(135deg, #304e43, #3d6657);
+  border-radius: 18px;
+  box-shadow: 0 10px 20px rgba(48, 78, 67, 0.18);
 }
 
 .history-list {
@@ -172,8 +181,14 @@ input:focus {
 .card-tools {
   color: var(--text-soft);
   white-space: nowrap;
-  width: 6.25rem;
+  width: 6.6rem;
   justify-content: space-between;
+}
+
+.exercise-right-tools {
+  width: 6.6rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .history-card__items {
@@ -212,6 +227,11 @@ input:focus {
 .load-label-button,
 .load-inline-input {
   min-width: 3.5rem;
+}
+
+.load-edit-stack {
+  display: grid;
+  gap: 0.35rem;
 }
 
 .load-label-button {
@@ -305,6 +325,10 @@ input:focus {
   color: var(--green-strong);
 }
 
+.load-presets--inline {
+  margin-top: 0;
+}
+
 .muted {
   margin: 0;
   color: var(--text-soft);
@@ -361,6 +385,7 @@ input:focus {
   height: 32px;
   flex: 0 0 32px;
   font-size: 1.25rem;
+  border-radius: 999px;
 }
 
 .entry-add-button,
@@ -369,6 +394,7 @@ input:focus {
   height: 36px;
   flex: 0 0 36px;
   font-size: 1.35rem;
+  border-radius: 999px;
 }
 
 .collapse-button,
@@ -390,6 +416,7 @@ input:focus {
   width: 46px;
   height: 46px;
   flex: 0 0 46px;
+  margin-left: auto;
   font-size: 1.85rem;
   line-height: 0.8;
   font-weight: 900;
@@ -398,8 +425,21 @@ input:focus {
 .date-add-button,
 .exercise-add-button,
 .entry-add-button {
-  background: transparent;
   color: var(--red-strong);
+}
+
+.date-add-button {
+  background: transparent;
+}
+
+.exercise-add-button {
+  background: rgba(220, 122, 62, 0.14);
+  color: #d46028;
+}
+
+.entry-add-button {
+  background: rgba(200, 67, 52, 0.14);
+  color: var(--red-mid);
 }
 
 .date-delete-button,
@@ -411,7 +451,7 @@ input:focus {
 
 .exercise-add-button,
 .exercise-delete-button {
-  border: 1px solid rgba(200, 67, 52, 0.18);
+  border: 1px solid rgba(212, 96, 40, 0.2);
 }
 
 .exercise-title-row {
@@ -433,7 +473,9 @@ input:focus {
 .today-add-wrap {
   display: flex;
   justify-content: center;
-  margin: 1.6rem 0 0.6rem;
+  margin-top: auto;
+  padding-top: 2rem;
+  padding-bottom: 1rem;
 }
 
 @media (max-width: 520px) {
