@@ -15,12 +15,12 @@ export function formatDateHeadline(date: string) {
     weekday: "short",
   }).format(parsed);
 
-  return `${day}号 ${weekday}`;
+  return `${day} 号 ${weekday}`;
 }
 
 export function formatMonthHeadline(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
-  return `${year % 100}年${month}月`;
+  return `${year % 100} 年 ${month} 月`;
 }
 
 export function sortDatesDesc(a: string, b: string) {

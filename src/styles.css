@@ -120,7 +120,7 @@ input:focus {
 .month-heading {
   margin: 0 0 0.65rem;
   padding: 0.78rem 1rem;
-  font-size: 1.12rem;
+  font-size: 1.32rem;
   font-weight: 700;
   color: rgba(255, 249, 238, 0.96);
   background: linear-gradient(135deg, #304e43, #3d6657);
@@ -179,7 +179,7 @@ input:focus {
 }
 
 .date-title {
-  font-size: 1.75rem;
+  font-size: 1.55rem;
   line-height: 1.05;
   letter-spacing: -0.03em;
 }
@@ -511,7 +511,7 @@ input:focus {
   }
 
   .date-title {
-    font-size: 1.5rem;
+    font-size: 1.38rem;
   }
 
   .quick-add-row {
