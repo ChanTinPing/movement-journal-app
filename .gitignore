@@ -3,3 +3,7 @@ dist/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+test-results/
+playwright-report/
+movement-journal-pwa/
+movement-journal-pwa.zip

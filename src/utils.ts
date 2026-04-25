@@ -1,5 +1,7 @@
 import { DayRecord } from "./types";
 
+const weekdayMap = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
 export function createId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
@@ -11,11 +13,8 @@ export function formatDateHeadline(date: string) {
   }
 
   const day = parsed.getDate();
-  const weekday = new Intl.DateTimeFormat("zh-CN", {
-    weekday: "short",
-  }).format(parsed);
-
-  return `${day} 号 ${weekday}`;
+  const weekday = weekdayMap[parsed.getDay()];
+  return `${day} 号（${weekday}）`;
 }
 
 export function formatMonthHeadline(monthKey: string) {

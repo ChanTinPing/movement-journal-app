@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">运动日记</title>
+  <rect width="512" height="512" rx="112" fill="#f6efe3"/>
+  <path d="M112 360c0-34 28-62 62-62h164c34 0 62 28 62 62v8c0 18-14 32-32 32H144c-18 0-32-14-32-32v-8Z" fill="#2e6b53"/>
+  <path d="M146 160c0-26 21-47 47-47h126c26 0 47 21 47 47v150H146V160Z" fill="#fffaf0" stroke="#2e6b53" stroke-width="24"/>
+  <path d="M194 188h124M194 242h82" stroke="#c84334" stroke-width="28" stroke-linecap="round"/>
+  <path d="M160 333h192" stroke="#f2d492" stroke-width="28" stroke-linecap="round"/>
+</svg>

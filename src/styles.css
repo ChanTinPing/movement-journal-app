@@ -14,12 +14,8 @@
   --text-soft: #6a645c;
   --green-strong: #2e6b53;
   --green-mid: #3f7d61;
-  --green-soft: rgba(46, 107, 83, 0.12);
+  --green-faint: rgba(46, 107, 83, 0.44);
   --red-strong: #c84334;
-  --red-mid: #a62f22;
-  --red-soft: rgba(200, 67, 52, 0.12);
-  --gold-strong: #8e6432;
-  --gold-soft: rgba(142, 100, 50, 0.11);
 }
 
 * {
@@ -29,7 +25,7 @@
 html,
 body,
 #root {
-  min-height: 100%;
+  height: 100%;
 }
 
 body {
@@ -61,14 +57,15 @@ input:focus {
 }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: 1.2rem;
 }
 
 .app-frame {
   width: min(100%, 560px);
+  height: calc(100dvh - 2.4rem);
+  max-height: calc(100dvh - 2.4rem);
   margin: 0 auto;
-  min-height: calc(100vh - 2.4rem);
   background: rgba(249, 244, 235, 0.76);
   border: 1px solid rgba(111, 92, 62, 0.1);
   border-radius: 28px;
@@ -80,25 +77,30 @@ input:focus {
 }
 
 .app-header {
-  position: relative;
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) 4.5rem;
+  align-items: center;
   padding: 1.35rem 1.1rem 0.85rem;
   text-align: center;
+  flex: 0 0 auto;
 }
 
 .app-header h1 {
+  grid-column: 2;
   margin: 0;
   font-size: 2rem;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 .delete-toggle {
-  position: absolute;
-  right: 1.1rem;
-  top: 1.2rem;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
   border-radius: 999px;
-  padding: 0.55rem 0.95rem;
+  padding: 0.55rem 0.8rem;
   background: rgba(110, 104, 91, 0.1);
   color: #554d43;
+  white-space: nowrap;
 }
 
 .delete-toggle--active {
@@ -107,10 +109,27 @@ input:focus {
 }
 
 .screen-body {
-  padding: 0 1rem 1.2rem;
+  padding: 0 1rem 1rem;
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.screen-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.bottom-actions {
+  flex: 0 0 auto;
+  padding: 0.5rem 1rem 0.8rem;
+  background: linear-gradient(180deg, rgba(249, 244, 235, 0) 0%, rgba(249, 244, 235, 0.96) 24%);
 }
 
 .month-section + .month-section {
@@ -119,13 +138,13 @@ input:focus {
 
 .month-heading {
   margin: 0 0 0.65rem;
-  padding: 0.78rem 1rem;
-  font-size: 1.7rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 1.38rem;
   font-weight: 700;
   color: rgba(255, 249, 238, 0.96);
   background: linear-gradient(135deg, #304e43, #3d6657);
-  border-radius: 18px;
-  box-shadow: 0 10px 20px rgba(48, 78, 67, 0.18);
+  border-radius: 16px;
+  box-shadow: 0 8px 18px rgba(48, 78, 67, 0.16);
 }
 
 .history-list {
@@ -134,20 +153,18 @@ input:focus {
 }
 
 .history-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
+  background: rgba(255, 252, 245, 0.92);
+  border: 1px solid rgba(122, 93, 51, 0.14);
   border-radius: 24px;
   box-shadow: 0 12px 30px rgba(93, 78, 49, 0.08);
-  padding: 1rem;
+  padding: 0.72rem 0.9rem 0.82rem;
 }
 
 .history-card__head,
-.card-tools,
 .date-cluster,
 .exercise-title-main,
 .exercise-title-row,
 .history-load-row,
-.load-content,
 .load-inline-group,
 .entry-edit-row,
 .quick-add-row {
@@ -158,9 +175,13 @@ input:focus {
 .history-card__head,
 .exercise-title-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 5.7rem 40px;
+  grid-template-columns: minmax(0, 1fr) 34px;
   align-items: center;
-  column-gap: 0.75rem;
+  column-gap: 0.55rem;
+}
+
+.history-card__head {
+  min-height: 2rem;
 }
 
 .history-load-row {
@@ -170,33 +191,16 @@ input:focus {
 
 .date-cluster,
 .exercise-title-main,
-.card-tools,
-.load-content,
 .load-inline-group,
 .entry-edit-row,
 .quick-add-row {
-  gap: 0.55rem;
+  gap: 0.42rem;
 }
 
 .date-title {
-  font-size: 1.55rem;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-}
-
-.card-tools {
-  color: var(--text-soft);
-  white-space: nowrap;
-}
-
-.record-count,
-.row-meta-spacer {
-  justify-self: end;
-}
-
-.record-count {
-  color: var(--text-soft);
-  white-space: nowrap;
+  font-size: 1.14rem;
+  line-height: 0.98;
+  letter-spacing: -0.02em;
 }
 
 .history-card__items {
@@ -224,12 +228,6 @@ input:focus {
 .history-load-block {
   display: grid;
   gap: 0.28rem;
-}
-
-.load-label {
-  min-width: 3.5rem;
-  color: var(--green-strong);
-  font-weight: 700;
 }
 
 .load-label-button,
@@ -271,15 +269,26 @@ input:focus {
   line-height: 1.25;
 }
 
+.entry-chip-button--delete {
+  color: var(--red-strong);
+}
+
 .entry-fragment,
 .inline-insert-wrap {
   display: inline-flex;
   align-items: center;
 }
 
+.entry-fragment {
+  gap: 0.08rem;
+}
+
 .insert-anchor-button,
 .insert-slash-button {
-  padding: 0 0.12rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   background: transparent;
   color: var(--green-mid);
   font-weight: 700;
@@ -293,6 +302,8 @@ input:focus {
 .insert-slash-button {
   font-size: 1rem;
   line-height: 1;
+  width: 0.95rem;
+  margin: 0 0.06rem;
 }
 
 .entry-inline-input {
@@ -339,7 +350,7 @@ input:focus {
 
 .muted {
   margin: 0;
-  color: var(--text-soft);
+  color: #6a645c;
 }
 
 .muted-block {
@@ -372,7 +383,6 @@ input:focus {
 .exercise-collapse-button {
   display: grid;
   place-items: center;
-  border-radius: 999px;
   line-height: 1;
   font-weight: 700;
 }
@@ -383,27 +393,30 @@ input:focus {
   height: auto;
   flex: 0 0 auto;
   padding: 0;
-  font-size: 2.5rem;
-  border-radius: 0;
+  font-size: 1.72rem;
+  background: transparent;
   line-height: 0.9;
 }
 
 .exercise-add-button,
+.exercise-delete-button,
+.entry-add-button,
+.load-delete-button {
+  width: auto;
+  height: auto;
+  flex: 0 0 auto;
+  padding: 0 0.08rem;
+  background: transparent;
+}
+
+.exercise-add-button,
 .exercise-delete-button {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  font-size: 1.25rem;
-  border-radius: 999px;
+  font-size: 1.35rem;
 }
 
 .entry-add-button,
 .load-delete-button {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  font-size: 1.35rem;
-  border-radius: 999px;
+  font-size: 1.45rem;
 }
 
 .collapse-button,
@@ -415,16 +428,16 @@ input:focus {
 }
 
 .collapse-button {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   justify-self: center;
 }
 
 .exercise-collapse-button {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   justify-self: center;
 }
 
@@ -465,34 +478,22 @@ input:focus {
 .date-add-button,
 .exercise-add-button,
 .entry-add-button {
-  color: var(--green-strong);
+  color: var(--green-faint);
+}
+
+.exercise-add-button,
+.entry-add-button {
+  opacity: 0.72;
 }
 
 .date-add-button {
-  background: transparent;
   transform: translateY(-0.08em);
-}
-
-.exercise-add-button {
-  background: var(--green-soft);
-  color: var(--green-strong);
-}
-
-.entry-add-button {
-  background: var(--gold-soft);
-  color: var(--gold-strong);
 }
 
 .date-delete-button,
 .exercise-delete-button,
 .load-delete-button {
-  background: var(--red-strong);
-  color: white;
-}
-
-.exercise-add-button,
-.exercise-delete-button {
-  border: 1px solid rgba(46, 107, 83, 0.18);
+  color: var(--red-strong);
 }
 
 .exercise-title-row {
@@ -503,20 +504,151 @@ input:focus {
   margin-left: 0.32rem;
 }
 
+.today-add-wrap {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
 .today-add-button {
-  margin-top: 0;
   border-radius: 18px;
   padding: 0.78rem 1rem;
   background: rgba(46, 107, 83, 0.1);
   color: var(--green-strong);
 }
 
-.today-add-wrap {
+.today-add-button--secondary {
+  background: rgba(61, 102, 87, 0.08);
+  color: #45695b;
+}
+
+.today-add-button--copy {
+  background: rgba(46, 107, 83, 0.1);
+  color: var(--green-strong);
+}
+
+.today-add-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tool-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.6rem;
+}
+
+.tool-button {
+  border-radius: 16px;
+  padding: 0.62rem 0.8rem;
+  background: rgba(110, 104, 91, 0.1);
+  color: #554d43;
+}
+
+.hidden-date-picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.hidden-file-picker {
+  display: none;
+}
+
+.calendar-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.calendar-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(33, 27, 20, 0.28);
+}
+
+.calendar-panel {
+  position: relative;
+  width: min(100%, 420px);
+  padding: 1rem;
+  border-radius: 24px;
+  background: rgba(255, 252, 245, 0.98);
+  box-shadow: 0 20px 45px rgba(60, 48, 29, 0.18);
+}
+
+.calendar-panel__header,
+.calendar-nav,
+.calendar-weekdays {
   display: flex;
-  justify-content: center;
-  margin-top: auto;
-  padding-top: 2rem;
-  padding-bottom: 1rem;
+  align-items: center;
+}
+
+.calendar-panel__header,
+.calendar-nav {
+  justify-content: space-between;
+}
+
+.calendar-panel__header {
+  margin-bottom: 0.75rem;
+}
+
+.calendar-close,
+.calendar-nav button {
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  background: rgba(46, 107, 83, 0.1);
+  color: var(--green-strong);
+}
+
+.calendar-weekdays {
+  margin-top: 0.75rem;
+  margin-bottom: 0.4rem;
+  justify-content: space-between;
+  color: #6a645c;
+}
+
+.calendar-weekdays span,
+.calendar-day {
+  width: 14.285%;
+}
+
+.calendar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(31, 41, 55, 0.34);
+}
+
+.calendar-day--active {
+  background: rgba(46, 107, 83, 0.16);
+  color: var(--green-strong);
+  font-weight: 700;
+}
+
+.calendar-day--outside {
+  opacity: 0.25;
+}
+
+.calendar-tip {
+  margin: 0.85rem 0 0;
+  color: #6a645c;
+  font-size: 0.94rem;
 }
 
 @media (max-width: 520px) {
@@ -526,28 +658,36 @@ input:focus {
 
   .app-frame {
     width: 100%;
-    min-height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     border-radius: 0;
   }
 
   .app-header {
     padding: 1.15rem 0.9rem 0.75rem;
-  }
-
-  .delete-toggle {
-    right: 0.9rem;
+    grid-template-columns: 4rem minmax(0, 1fr) 4rem;
   }
 
   .screen-body {
-    padding: 0 0.9rem 1rem;
+    padding: 0 0.9rem 0.9rem;
+  }
+
+  .bottom-actions {
+    padding: 0.45rem 0.9rem 0.75rem;
   }
 
   .date-title {
-    font-size: 1.38rem;
+    font-size: 1.08rem;
   }
 
-  .quick-add-row {
+  .quick-add-row,
+  .today-add-wrap {
+    grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .calendar-modal {
+    padding: 0.8rem;
   }
 }

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { loadRecords, saveRecords } from "./storage";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createBackupPayload, loadRecords, parseBackupFile, saveRecords } from "./storage";
 import { DayRecord, Exercise, LoadGroup } from "./types";
 import {
   createId,
@@ -11,10 +12,58 @@ import {
 
 type DraftMap = Record<string, string>;
 type InsertTarget = { groupId: string; index: number } | null;
+type CalendarMode = "copy" | "history" | null;
+
+type CalendarCell = {
+  date: string;
+  day: number;
+  inMonth: boolean;
+};
 
 const today = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Shanghai",
 }).format(new Date());
+
+const weekLabels = ["一", "二", "三", "四", "五", "六", "日"];
+
+function buildCalendarCells(monthKey: string): CalendarCell[] {
+  const [year, month] = monthKey.split("-").map(Number);
+  const firstDay = new Date(year, month - 1, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const firstVisibleDay = new Date(year, month - 1, 1 - startOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const current = new Date(firstVisibleDay);
+    current.setDate(firstVisibleDay.getDate() + index);
+
+    return {
+      date: new Intl.DateTimeFormat("en-CA").format(current),
+      day: current.getDate(),
+      inMonth: current.getMonth() === month - 1,
+    };
+  });
+}
+
+function shiftMonth(monthKey: string, offset: number) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const next = new Date(year, month - 1 + offset, 1);
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+  }).format(next);
+}
+
+function cloneExercise(exercise: Exercise): Exercise {
+  return {
+    id: createId("exercise"),
+    name: exercise.name,
+    loadGroups: exercise.loadGroups.map((group) => ({
+      id: createId("load"),
+      label: group.label,
+      entries: [...group.entries],
+    })),
+  };
+}
 
 function App() {
   const [records, setRecords] = useState<DayRecord[]>(() => loadRecords());
@@ -29,6 +78,11 @@ function App() {
   const [collapsedExercises, setCollapsedExercises] = useState<Record<string, boolean>>({});
   const [editingEntryTarget, setEditingEntryTarget] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [calendarMode, setCalendarMode] = useState<CalendarMode>(null);
+  const [calendarMonth, setCalendarMonth] = useState(today.slice(0, 7));
+  const datePickerRef = useRef<HTMLInputElement | null>(null);
+  const importFileRef = useRef<HTMLInputElement | null>(null);
+  const recordRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
     saveRecords(records);
@@ -79,6 +133,28 @@ function App() {
     return suggestionMap;
   }, [records]);
 
+  const copyableRecords = useMemo(
+    () => sortedRecords.filter((record) => record.date !== today && record.exercises.length > 0),
+    [sortedRecords],
+  );
+
+  const copyableDateSet = useMemo(
+    () => new Set(copyableRecords.map((record) => record.date)),
+    [copyableRecords],
+  );
+
+  const workoutDateSet = useMemo(
+    () =>
+      new Set(
+        records
+          .filter((record) => record.exercises.some((exercise) => exercise.loadGroups.length > 0))
+          .map((record) => record.date),
+      ),
+    [records],
+  );
+
+  const calendarCells = useMemo(() => buildCalendarCells(calendarMonth), [calendarMonth]);
+
   function touchRecord(record: DayRecord): DayRecord {
     return {
       ...record,
@@ -94,22 +170,160 @@ function App() {
     );
   }
 
-  function addTodayRecord() {
-    const existing = records.find((record) => record.date === today);
+  function expandRecord(recordId: string) {
+    setCollapsedDates((current) => ({ ...current, [recordId]: false }));
+  }
+
+  function openAddExercise(recordId: string) {
+    setAddExerciseTarget((current) => (current === recordId ? null : recordId));
+    expandRecord(recordId);
+  }
+
+  function addRecordForDate(date: string) {
+    if (!date) {
+      return;
+    }
+
+    const existing = records.find((record) => record.date === date);
     if (existing) {
-      setAddExerciseTarget((current) => (current === existing.id ? null : existing.id));
+      openAddExercise(existing.id);
       return;
     }
 
     const nextRecord: DayRecord = {
       id: createId("day"),
-      date: today,
+      date,
       exercises: [],
       updatedAt: new Date().toISOString(),
     };
 
     setRecords((current) => [nextRecord, ...current]);
     setAddExerciseTarget(nextRecord.id);
+    expandRecord(nextRecord.id);
+  }
+  function addTodayRecord() {
+    addRecordForDate(today);
+  }
+
+  function openDatePicker() {
+    const input = datePickerRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.value = today;
+    const picker = input as HTMLInputElement & { showPicker?: () => void };
+    if (typeof picker.showPicker === "function") {
+      picker.showPicker();
+      return;
+    }
+
+    input.click();
+  }
+
+  function openCopyCalendar() {
+    if (copyableRecords.length === 0) {
+      return;
+    }
+
+    setCalendarMonth(copyableRecords[0].date.slice(0, 7));
+    setCalendarMode("copy");
+  }
+
+  function openHistoryCalendar() {
+    setCalendarMonth((sortedRecords[0]?.date ?? today).slice(0, 7));
+    setCalendarMode("history");
+  }
+
+  function closeCalendar() {
+    setCalendarMode(null);
+  }
+
+  function copyRecordToToday(sourceDate: string) {
+    const sourceRecord = records.find((record) => record.date === sourceDate);
+    if (!sourceRecord || sourceDate === today) {
+      return;
+    }
+
+    const copiedExercises = sourceRecord.exercises.map(cloneExercise);
+    const existingToday = records.find((record) => record.date === today);
+
+    if (existingToday) {
+      updateRecord(existingToday.id, (record) => ({
+        ...record,
+        exercises: [...record.exercises, ...copiedExercises],
+      }));
+      expandRecord(existingToday.id);
+    } else {
+      const nextRecord: DayRecord = {
+        id: createId("day"),
+        date: today,
+        exercises: copiedExercises,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setRecords((current) => [nextRecord, ...current]);
+      expandRecord(nextRecord.id);
+    }
+
+    setAddExerciseTarget(null);
+    closeCalendar();
+  }
+
+  function openRecordFromCalendar(date: string) {
+    const record = records.find((item) => item.date === date);
+    if (!record) {
+      return;
+    }
+
+    expandRecord(record.id);
+    closeCalendar();
+    window.requestAnimationFrame(() => {
+      recordRefs.current[date]?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }
+
+  function exportBackup() {
+    const payload = createBackupPayload(records);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `movement-journal-backup-${today}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openImportFile() {
+    importFileRef.current?.click();
+  }
+
+  async function importBackup(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    const recordsFromBackup = parseBackupFile(await file.text());
+    if (!recordsFromBackup) {
+      window.alert("备份文件无法读取。");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `导入后会替换当前 ${records.length} 天记录，改为备份里的 ${recordsFromBackup.length} 天记录。继续吗？`,
+      )
+    ) {
+      return;
+    }
+
+    setRecords(recordsFromBackup);
+    setCollapsedDates({});
+    setCollapsedExercises({});
+    setAddExerciseTarget(null);
+    setAddLoadTarget(null);
+    setInsertTarget(null);
+    setCalendarMode(null);
   }
 
   function addExercise(recordId: string) {
@@ -132,7 +346,7 @@ function App() {
 
     setExerciseDrafts((current) => ({ ...current, [fieldId]: "" }));
     setAddExerciseTarget(null);
-    setCollapsedDates((current) => ({ ...current, [recordId]: false }));
+    expandRecord(recordId);
   }
 
   function addLoadGroup(recordId: string, exerciseId: string, rawLabel?: string) {
@@ -234,7 +448,6 @@ function App() {
     setEntryDrafts((current) => ({ ...current, [fieldId]: "" }));
     setInsertTarget(null);
   }
-
   function startEditingEntry(entryId: string, value: string) {
     setEntryDrafts((current) => ({ ...current, [entryId]: value }));
     setEditingEntryTarget(entryId);
@@ -259,8 +472,8 @@ function App() {
                 group.id === loadGroupId
                   ? {
                       ...group,
-                      entries: group.entries.map((entry, index) =>
-                        index === entryIndex ? nextValue : entry,
+                      entries: group.entries.map((entry, innerIndex) =>
+                        innerIndex === entryIndex ? nextValue : entry,
                       ),
                     }
                   : group,
@@ -271,6 +484,47 @@ function App() {
     }));
 
     setEditingEntryTarget(null);
+  }
+
+  function removeEntry(
+    recordId: string,
+    exerciseId: string,
+    loadGroupId: string,
+    entryIndex: number,
+    entryValue: string,
+  ) {
+    const record = records.find((item) => item.id === recordId);
+    const exercise = record?.exercises.find((item) => item.id === exerciseId);
+    if (!record || !exercise) {
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `要删除 ${formatDateHeadline(record.date)} 的“${exercise.name}”里的“${entryValue}”吗？`,
+      )
+    ) {
+      return;
+    }
+
+    updateRecord(recordId, (nextRecord) => ({
+      ...nextRecord,
+      exercises: nextRecord.exercises.map((item) =>
+        item.id === exerciseId
+          ? {
+              ...item,
+              loadGroups: item.loadGroups.map((group) =>
+                group.id === loadGroupId
+                  ? {
+                      ...group,
+                      entries: group.entries.filter((_, innerIndex) => innerIndex !== entryIndex),
+                    }
+                  : group,
+              ),
+            }
+          : item,
+      ),
+    }));
   }
 
   function toggleDate(recordId: string) {
@@ -290,7 +544,7 @@ function App() {
       return;
     }
 
-    if (!window.confirm(`确定删掉 ${record.date} 这一天的整张记录吗？`)) {
+    if (!window.confirm(`确定删掉 ${formatDateHeadline(record.date)} 的整张记录吗？`)) {
       return;
     }
 
@@ -304,13 +558,13 @@ function App() {
       return;
     }
 
-    if (!window.confirm(`确定删掉 ${record.date} 的动作“${exercise.name}”吗？`)) {
+    if (!window.confirm(`确定删掉 ${formatDateHeadline(record.date)} 的“${exercise.name}”吗？`)) {
       return;
     }
 
-    updateRecord(recordId, (record) => ({
-      ...record,
-      exercises: record.exercises.filter((exercise) => exercise.id !== exerciseId),
+    updateRecord(recordId, (nextRecord) => ({
+      ...nextRecord,
+      exercises: nextRecord.exercises.filter((item) => item.id !== exerciseId),
     }));
   }
 
@@ -323,19 +577,23 @@ function App() {
     }
 
     const label = group.label || "默认";
-    if (!window.confirm(`确定删掉 ${record.date} 的“${exercise.name}”里负载“${label}”这一行吗？`)) {
+    if (
+      !window.confirm(
+        `确定删掉 ${formatDateHeadline(record.date)} 的“${exercise.name}”里“${label}”这一行吗？`,
+      )
+    ) {
       return;
     }
 
-    updateRecord(recordId, (record) => ({
-      ...record,
-      exercises: record.exercises.map((exercise) =>
-        exercise.id === exerciseId
+    updateRecord(recordId, (nextRecord) => ({
+      ...nextRecord,
+      exercises: nextRecord.exercises.map((item) =>
+        item.id === exerciseId
           ? {
-              ...exercise,
-              loadGroups: exercise.loadGroups.filter((group) => group.id !== loadGroupId),
+              ...item,
+              loadGroups: item.loadGroups.filter((groupItem) => groupItem.id !== loadGroupId),
             }
-          : exercise,
+          : item,
       ),
     }));
   }
@@ -379,7 +637,6 @@ function App() {
       </span>
     );
   }
-
   return (
     <div className="app-shell">
       <div className="app-frame">
@@ -392,6 +649,7 @@ function App() {
               setAddExerciseTarget(null);
               setAddLoadTarget(null);
               setInsertTarget(null);
+              setCalendarMode(null);
             }}
           >
             删除
@@ -401,7 +659,7 @@ function App() {
         <main className="screen-body">
           {monthSections.length === 0 ? (
             <div className="history-card">
-              <p className="muted">还没有记录</p>
+              <p className="muted">无记录</p>
             </div>
           ) : (
             monthSections.map((section) => (
@@ -409,42 +667,43 @@ function App() {
                 <div className="month-heading">{formatMonthHeadline(section.month)}</div>
                 <div className="history-list">
                   {section.records.map((record) => (
-                    <article className="history-card" key={record.id}>
+                    <article
+                      className="history-card"
+                      key={record.id}
+                      ref={(node) => {
+                        recordRefs.current[record.date] = node;
+                      }}
+                    >
                       <div className="history-card__head">
                         <div className="date-cluster">
                           <strong className="date-title">{formatDateHeadline(record.date)}</strong>
                           <button
                             className={deleteMode ? "date-delete-button" : "date-add-button"}
                             onClick={() =>
-                              deleteMode
-                                ? removeDate(record.id)
-                                : setAddExerciseTarget((current) =>
-                                    current === record.id ? null : record.id,
-                                  )
+                              deleteMode ? removeDate(record.id) : openAddExercise(record.id)
                             }
                           >
                             {deleteMode ? "−" : "+"}
                           </button>
                         </div>
-                        <span className="record-count">{record.exercises.length} 个动作</span>
-                          <button
-                            className={
-                              collapsedDates[record.id]
-                                ? "collapse-button is-collapsed"
-                                : "collapse-button is-expanded"
-                            }
-                            onClick={() => toggleDate(record.id)}
-                            aria-label={collapsedDates[record.id] ? "展开" : "收起"}
-                          >
-                            <span aria-hidden="true" />
-                          </button>
+                        <button
+                          className={
+                            collapsedDates[record.id]
+                              ? "collapse-button is-collapsed"
+                              : "collapse-button is-expanded"
+                          }
+                          onClick={() => toggleDate(record.id)}
+                          aria-label={collapsedDates[record.id] ? "展开" : "收起"}
+                        >
+                          <span aria-hidden="true" />
+                        </button>
                       </div>
 
                       {addExerciseTarget === record.id && !deleteMode ? (
                         <div className="quick-add-row quick-add-row--card">
                           <input
                             type="text"
-                            placeholder="动作名"
+                            placeholder="名称"
                             list="exercise-suggestions"
                             value={exerciseDrafts[`exercise-${record.id}`] ?? ""}
                             onChange={(event) =>
@@ -466,7 +725,7 @@ function App() {
                       ) : null}
 
                       {collapsedDates[record.id] ? null : record.exercises.length === 0 ? (
-                        <p className="muted muted-block">这一天还没有动作</p>
+                        <p className="muted muted-block">无记录</p>
                       ) : (
                         <div className="history-card__items">
                           {record.exercises.map((exercise) => (
@@ -492,7 +751,6 @@ function App() {
                                       {deleteMode ? "−" : "+"}
                                     </button>
                                   </div>
-                                  <span className="row-meta-spacer" />
                                   <button
                                     className={
                                       collapsedExercises[exercise.id]
@@ -553,7 +811,7 @@ function App() {
 
                                   <div className="history-exercise__loads">
                                     {exercise.loadGroups.length === 0 ? (
-                                      <p className="muted">还没有记录</p>
+                                      <p className="muted">无记录</p>
                                     ) : (
                                       exercise.loadGroups.map((group) => (
                                         <div className="history-load-block" key={group.id}>
@@ -566,25 +824,16 @@ function App() {
                                                   onChange={(event) =>
                                                     setLoadDrafts((current) => ({
                                                       ...current,
-                                                      [`edit-load-${group.id}`]:
-                                                        event.target.value,
+                                                      [`edit-load-${group.id}`]: event.target.value,
                                                     }))
                                                   }
                                                   onBlur={() =>
-                                                    saveEditedLoad(
-                                                      record.id,
-                                                      exercise.id,
-                                                      group.id,
-                                                    )
+                                                    saveEditedLoad(record.id, exercise.id, group.id)
                                                   }
                                                   onKeyDown={(event) => {
                                                     if (event.key === "Enter") {
                                                       event.preventDefault();
-                                                      saveEditedLoad(
-                                                        record.id,
-                                                        exercise.id,
-                                                        group.id,
-                                                      );
+                                                      saveEditedLoad(record.id, exercise.id, group.id);
                                                     }
                                                   }}
                                                   autoFocus
@@ -592,9 +841,7 @@ function App() {
                                                 <div className="load-presets load-presets--inline">
                                                   <button
                                                     className="load-preset-button"
-                                                    onMouseDown={(event) =>
-                                                      event.preventDefault()
-                                                    }
+                                                    onMouseDown={(event) => event.preventDefault()}
                                                     onClick={() => {
                                                       setLoadDrafts((current) => ({
                                                         ...current,
@@ -628,8 +875,7 @@ function App() {
                                                 {renderInsertInput(record.id, exercise.id, group.id, 0)}
                                                 {group.entries.map((entry, entryIndex) => {
                                                   const entryId = `edit-${group.id}-${entryIndex}`;
-                                                  const isEditing =
-                                                    editingEntryTarget === entryId;
+                                                  const isEditing = editingEntryTarget === entryId;
 
                                                   return (
                                                     <span className="entry-fragment" key={entryId}>
@@ -666,9 +912,21 @@ function App() {
                                                         />
                                                       ) : (
                                                         <button
-                                                          className="entry-chip-button"
+                                                          className={
+                                                            deleteMode
+                                                              ? "entry-chip-button entry-chip-button--delete"
+                                                              : "entry-chip-button"
+                                                          }
                                                           onClick={() =>
-                                                            startEditingEntry(entryId, entry)
+                                                            deleteMode
+                                                              ? removeEntry(
+                                                                  record.id,
+                                                                  exercise.id,
+                                                                  group.id,
+                                                                  entryIndex,
+                                                                  entry,
+                                                                )
+                                                              : startEditingEntry(entryId, entry)
                                                           }
                                                         >
                                                           {entry}
@@ -679,10 +937,7 @@ function App() {
                                                           <button
                                                             className="insert-slash-button"
                                                             onClick={() =>
-                                                              toggleInsertTarget(
-                                                                group.id,
-                                                                entryIndex + 1,
-                                                              )
+                                                              toggleInsertTarget(group.id, entryIndex + 1)
                                                             }
                                                           >
                                                             /
@@ -778,14 +1033,126 @@ function App() {
               <option key={name} value={name} />
             ))}
           </datalist>
+        </main>
 
+        <footer className="bottom-actions">
+          <input
+            ref={datePickerRef}
+            className="hidden-date-picker"
+            type="date"
+            onChange={(event) => {
+              addRecordForDate(event.target.value);
+              event.target.value = "";
+            }}
+            aria-hidden="true"
+            tabIndex={-1}
+          />
+          <input
+            ref={importFileRef}
+            className="hidden-file-picker"
+            type="file"
+            accept="application/json,.json"
+            onChange={(event) => {
+              importBackup(event.target.files?.[0] ?? null);
+              event.target.value = "";
+            }}
+            aria-hidden="true"
+            tabIndex={-1}
+          />
           <div className="today-add-wrap">
+            <button
+              className="today-add-button today-add-button--copy"
+              onClick={openCopyCalendar}
+              disabled={copyableRecords.length === 0}
+            >
+              今天（复制）+
+            </button>
             <button className="today-add-button" onClick={addTodayRecord}>
               今天 +
             </button>
+            <button
+              className="today-add-button today-add-button--secondary"
+              onClick={openDatePicker}
+            >
+              其它日期 +
+            </button>
           </div>
-        </main>
+          <div className="tool-actions">
+            <button className="tool-button" onClick={openHistoryCalendar}>
+              日历
+            </button>
+            <button className="tool-button" onClick={exportBackup}>
+              导出
+            </button>
+            <button className="tool-button" onClick={openImportFile}>
+              导入
+            </button>
+          </div>
+        </footer>
       </div>
+
+      {calendarMode ? (
+        <div className="calendar-modal" role="dialog" aria-modal="true">
+          <div className="calendar-backdrop" onClick={closeCalendar} />
+          <div className="calendar-panel">
+            <div className="calendar-panel__header">
+              <strong>{calendarMode === "copy" ? "复制到今天" : "运动日历"}</strong>
+              <button className="calendar-close" onClick={closeCalendar}>
+                关闭
+              </button>
+            </div>
+            <div className="calendar-nav">
+              <button onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))}>
+                上月
+              </button>
+              <strong>{formatMonthHeadline(calendarMonth)}</strong>
+              <button onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))}>
+                下月
+              </button>
+            </div>
+            <div className="calendar-weekdays">
+              {weekLabels.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+            <div className="calendar-grid">
+              {calendarCells.map((cell) => {
+                const selectable =
+                  cell.inMonth &&
+                  (calendarMode === "copy"
+                    ? copyableDateSet.has(cell.date)
+                    : workoutDateSet.has(cell.date));
+                return (
+                  <button
+                    key={cell.date}
+                    className={
+                      selectable
+                        ? "calendar-day calendar-day--active"
+                        : cell.inMonth
+                          ? "calendar-day"
+                          : "calendar-day calendar-day--outside"
+                    }
+                    onClick={() =>
+                      selectable &&
+                      (calendarMode === "copy"
+                        ? copyRecordToToday(cell.date)
+                        : openRecordFromCalendar(cell.date))
+                    }
+                    disabled={!selectable}
+                  >
+                    {cell.day}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="calendar-tip">
+              {calendarMode === "copy"
+                ? "绿色日期可复制到今天，其他日期不可选。"
+                : "绿色日期有运动记录，点击可回到那天。"}
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
