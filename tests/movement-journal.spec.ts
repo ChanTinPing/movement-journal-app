@@ -21,9 +21,12 @@ test("手机布局没有横向溢出，并暴露 PWA 安装资源", async ({ pag
     bodyScrollWidth: document.body.scrollWidth,
     viewportWidth: window.innerWidth,
     htmlScrollWidth: document.documentElement.scrollWidth,
+    bottomHeight: document.querySelector(".bottom-actions")?.getBoundingClientRect().height ?? 0,
+    viewportHeight: window.innerHeight,
   }));
   expect(overflow.bodyScrollWidth).toBeLessThanOrEqual(overflow.viewportWidth + 1);
   expect(overflow.htmlScrollWidth).toBeLessThanOrEqual(overflow.viewportWidth + 1);
+  expect(overflow.bottomHeight).toBeLessThanOrEqual(overflow.viewportHeight * 0.18);
 
   const manifestResponse = await page.request.get("manifest.webmanifest");
   expect(manifestResponse.ok()).toBeTruthy();
