@@ -217,6 +217,10 @@ input:focus {
   border-top: 1px solid rgba(122, 93, 51, 0.1);
 }
 
+.history-exercise--dragging {
+  opacity: 0.58;
+}
+
 .history-exercise__name {
   font-size: 0.98rem;
   font-weight: 700;
@@ -235,12 +239,15 @@ input:focus {
 
 .load-label-button,
 .load-inline-input {
-  min-width: 3.15rem;
+  width: 5.6rem;
+  min-width: 5.6rem;
 }
 
 .load-edit-stack {
   display: grid;
   gap: 0.28rem;
+  flex: 0 0 5.6rem;
+  width: 5.6rem;
 }
 
 .load-label-button {
@@ -250,6 +257,7 @@ input:focus {
   font-size: 0.88rem;
   font-weight: 700;
   text-align: left;
+  white-space: nowrap;
 }
 
 .load-inline-group {
@@ -320,7 +328,7 @@ input:focus {
   display: flex;
   align-items: center;
   gap: 0.44rem;
-  margin-left: calc(3.6rem + 0.55rem);
+  margin-left: calc(5.6rem + 0.55rem);
 }
 
 .tail-insert-confirm {
@@ -385,7 +393,7 @@ input:focus {
 .entry-add-button,
 .load-delete-button,
 .collapse-button,
-.exercise-collapse-button {
+.exercise-drag-handle {
   display: grid;
   place-items: center;
   line-height: 1;
@@ -425,7 +433,7 @@ input:focus {
 }
 
 .collapse-button,
-.exercise-collapse-button {
+.exercise-drag-handle {
   background: transparent;
   color: var(--green-strong);
   position: relative;
@@ -439,15 +447,17 @@ input:focus {
   justify-self: center;
 }
 
-.exercise-collapse-button {
+.exercise-drag-handle {
   width: 26px;
   height: 26px;
   flex: 0 0 26px;
   justify-self: center;
+  gap: 2px;
+  touch-action: none;
+  cursor: grab;
 }
 
-.collapse-button > span,
-.exercise-collapse-button > span {
+.collapse-button > span {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -468,16 +478,12 @@ input:focus {
   border-top: 13px solid var(--green-strong);
 }
 
-.exercise-collapse-button.is-expanded > span {
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-bottom: 11px solid var(--green-strong);
-}
-
-.exercise-collapse-button.is-collapsed > span {
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 11px solid var(--green-strong);
+.exercise-drag-handle > span {
+  width: 12px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.76;
 }
 
 .date-add-button,
@@ -506,7 +512,7 @@ input:focus {
 }
 
 .entry-add-button--tail {
-  margin-left: 0.24rem;
+  margin-left: 0.64rem;
 }
 
 .today-add-wrap {

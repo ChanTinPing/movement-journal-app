@@ -137,6 +137,71 @@ test("可以删除整个动作和负荷行", async ({ page }) => {
   expect(saved[0].exercises.map((exercise: { name: string }) => exercise.name)).toEqual(["深蹲"]);
 });
 
+test("可以在同一天拖动动作排序", async ({ page }) => {
+  const record = {
+    id: "sort-day",
+    date: today,
+    updatedAt: "2026-04-25T10:00:00.000Z",
+    exercises: ["深蹲", "划船", "硬拉"].map((name, index) => ({
+      id: `sort-exercise-${index}`,
+      name,
+      loadGroups: [
+        {
+          id: `sort-load-${index}`,
+          label: "",
+          entries: [`${index + 1}`],
+        },
+      ],
+    })),
+  };
+
+  await page.evaluate(
+    ({ seedRecord }) => {
+      localStorage.setItem("movement-journal-records", JSON.stringify([seedRecord]));
+    },
+    { seedRecord: record },
+  );
+  await page.reload();
+
+  const firstHandle = page.locator(".history-exercise .exercise-drag-handle").first();
+  const lastExercise = page.locator(".history-exercise").nth(2);
+  const start = await firstHandle.boundingBox();
+  const end = await lastExercise.boundingBox();
+  expect(start).toBeTruthy();
+  expect(end).toBeTruthy();
+
+  const startX = start!.x + start!.width / 2;
+  const startY = start!.y + start!.height / 2;
+  const endX = end!.x + end!.width / 2;
+  const endY = end!.y + end!.height / 2;
+
+  await firstHandle.dispatchEvent("pointerdown", {
+    clientX: startX,
+    clientY: startY,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+  await firstHandle.dispatchEvent("pointermove", {
+    clientX: endX,
+    clientY: endY,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+  await firstHandle.dispatchEvent("pointerup", {
+    clientX: endX,
+    clientY: endY,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+
+  const saved = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]")[0].exercises.map(
+      (exercise: { name: string }) => exercise.name,
+    ),
+  );
+  expect(saved).toEqual(["划船", "硬拉", "深蹲"]);
+});
+
 test("可以把历史记录复制到今天", async ({ page }) => {
   const sourceRecord = {
     id: "source-2026-03-18",
@@ -219,8 +284,10 @@ test("可以查看运动日历，并导出导入本地备份", async ({ page }) 
   expect(download.suggestedFilename()).toContain("movement-journal-backup");
   expect(downloadPath).toBeTruthy();
 
-  const exported = JSON.parse(await readFile(downloadPath!, "utf8"));
-  expect(exported.records[0].exercises[0].name).toBe("硬拉");
+  const exported = await readFile(downloadPath!, "utf8");
+  expect(download.suggestedFilename()).toContain(".txt");
+  expect(exported).toContain("# 运动日记 TXT v1");
+  expect(exported).toContain("2026-04-18 | 硬拉 | 60kg | 5 / 5");
 
   const importedRecord = {
     ...backupRecord,
@@ -243,15 +310,14 @@ test("可以查看运动日历，并导出导入本地备份", async ({ page }) 
 
   page.once("dialog", (dialog) => dialog.accept());
   await page.locator('input[type="file"]').setInputFiles({
-    name: "movement-journal-backup.json",
-    mimeType: "application/json",
+    name: "movement-journal-backup.txt",
+    mimeType: "text/plain",
     buffer: Buffer.from(
-      JSON.stringify({
-        app: "movement-journal",
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        records: [importedRecord],
-      }),
+      [
+        "# 运动日记 TXT v1",
+        "日期 | 动作 | 类型 | 数字",
+        `${importedRecord.date} | 卧推 | 40kg | 8`,
+      ].join("\n"),
     ),
   });
 

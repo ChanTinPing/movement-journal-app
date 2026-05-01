@@ -13,6 +13,7 @@ import {
 type DraftMap = Record<string, string>;
 type InsertTarget = { groupId: string; index: number } | null;
 type CalendarMode = "copy" | "history" | null;
+type DraggingExercise = { recordId: string; exerciseId: string } | null;
 
 type CalendarCell = {
   date: string;
@@ -75,18 +76,55 @@ function App() {
   const [addLoadTarget, setAddLoadTarget] = useState<string | null>(null);
   const [insertTarget, setInsertTarget] = useState<InsertTarget>(null);
   const [collapsedDates, setCollapsedDates] = useState<Record<string, boolean>>({});
-  const [collapsedExercises, setCollapsedExercises] = useState<Record<string, boolean>>({});
   const [editingEntryTarget, setEditingEntryTarget] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
   const [calendarMode, setCalendarMode] = useState<CalendarMode>(null);
   const [calendarMonth, setCalendarMonth] = useState(today.slice(0, 7));
+  const [draggingExercise, setDraggingExercise] = useState<DraggingExercise>(null);
   const datePickerRef = useRef<HTMLInputElement | null>(null);
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const recordRefs = useRef<Record<string, HTMLElement | null>>({});
+  const dragExerciseRef = useRef<DraggingExercise>(null);
 
   useEffect(() => {
     saveRecords(records);
   }, [records]);
+
+  useEffect(() => {
+    if (!addExerciseTarget && !addLoadTarget && !insertTarget) {
+      return;
+    }
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (
+        target.closest(
+          [
+            ".quick-add-row",
+            ".quick-add-stack",
+            ".inline-insert-wrap",
+            ".tail-insert-row",
+            ".date-add-button",
+            ".exercise-add-button",
+            ".entry-add-button",
+            ".insert-anchor-button",
+            ".insert-slash-button",
+          ].join(","),
+        )
+      ) {
+        return;
+      }
+
+      closeTransientInputs();
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [addExerciseTarget, addLoadTarget, insertTarget]);
 
   const sortedRecords = useMemo(
     () => [...records].sort((left, right) => sortDatesDesc(left.date, right.date)),
@@ -168,6 +206,77 @@ function App() {
         record.id === recordId ? touchRecord(updater(record)) : record,
       ),
     );
+  }
+
+  function closeTransientInputs() {
+    setAddExerciseTarget(null);
+    setAddLoadTarget(null);
+    setInsertTarget(null);
+  }
+
+  function moveExerciseWithinRecord(
+    recordId: string,
+    draggedExerciseId: string,
+    targetExerciseId: string,
+  ) {
+    if (draggedExerciseId === targetExerciseId) {
+      return;
+    }
+
+    updateRecord(recordId, (record) => {
+      const fromIndex = record.exercises.findIndex((exercise) => exercise.id === draggedExerciseId);
+      const toIndex = record.exercises.findIndex((exercise) => exercise.id === targetExerciseId);
+      if (fromIndex < 0 || toIndex < 0) {
+        return record;
+      }
+
+      const exercises = [...record.exercises];
+      const [movedExercise] = exercises.splice(fromIndex, 1);
+      exercises.splice(toIndex, 0, movedExercise);
+      return { ...record, exercises };
+    });
+  }
+
+  function startExerciseDrag(recordId: string, exerciseId: string) {
+    if (deleteMode) {
+      return;
+    }
+
+    const nextDragging = { recordId, exerciseId };
+    dragExerciseRef.current = nextDragging;
+    setDraggingExercise(nextDragging);
+    closeTransientInputs();
+  }
+
+  function finishExerciseDrag() {
+    dragExerciseRef.current = null;
+    setDraggingExercise(null);
+  }
+
+  function dragExerciseOver(recordId: string, targetExerciseId: string) {
+    const currentDragging = dragExerciseRef.current;
+    if (!currentDragging || currentDragging.recordId !== recordId) {
+      return;
+    }
+
+    moveExerciseWithinRecord(recordId, currentDragging.exerciseId, targetExerciseId);
+  }
+
+  function dragExerciseOverPoint(clientX: number, clientY: number) {
+    const currentDragging = dragExerciseRef.current;
+    if (!currentDragging) {
+      return;
+    }
+
+    const element = document.elementFromPoint(clientX, clientY);
+    const target = element?.closest("[data-record-id][data-exercise-id]") as HTMLElement | null;
+    const recordId = target?.dataset.recordId;
+    const exerciseId = target?.dataset.exerciseId;
+    if (!recordId || !exerciseId) {
+      return;
+    }
+
+    dragExerciseOver(recordId, exerciseId);
   }
 
   function expandRecord(recordId: string) {
@@ -285,11 +394,11 @@ function App() {
 
   function exportBackup() {
     const payload = createBackupPayload(records);
-    const blob = new Blob([payload], { type: "application/json" });
+    const blob = new Blob([payload], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `movement-journal-backup-${today}.json`;
+    link.download = `movement-journal-backup-${today}.txt`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -319,7 +428,6 @@ function App() {
 
     setRecords(recordsFromBackup);
     setCollapsedDates({});
-    setCollapsedExercises({});
     setAddExerciseTarget(null);
     setAddLoadTarget(null);
     setInsertTarget(null);
@@ -373,7 +481,6 @@ function App() {
 
     setLoadDrafts((current) => ({ ...current, [fieldId]: "" }));
     setAddLoadTarget(null);
-    setCollapsedExercises((current) => ({ ...current, [exerciseId]: false }));
   }
 
   function startEditingLoad(groupId: string, label: string) {
@@ -531,13 +638,6 @@ function App() {
     setCollapsedDates((current) => ({ ...current, [recordId]: !current[recordId] }));
   }
 
-  function toggleExercise(exerciseId: string) {
-    setCollapsedExercises((current) => ({
-      ...current,
-      [exerciseId]: !current[exerciseId],
-    }));
-  }
-
   function removeDate(recordId: string) {
     const record = records.find((item) => item.id === recordId);
     if (!record) {
@@ -650,6 +750,7 @@ function App() {
               setAddLoadTarget(null);
               setInsertTarget(null);
               setCalendarMode(null);
+              finishExerciseDrag();
             }}
           >
             删除
@@ -729,7 +830,26 @@ function App() {
                       ) : (
                         <div className="history-card__items">
                           {record.exercises.map((exercise) => (
-                            <section className="history-exercise" key={exercise.id}>
+                            <section
+                              className={
+                                draggingExercise?.exerciseId === exercise.id
+                                  ? "history-exercise history-exercise--dragging"
+                                  : "history-exercise"
+                              }
+                              key={exercise.id}
+                              data-record-id={record.id}
+                              data-exercise-id={exercise.id}
+                              onDragOver={(event) => {
+                                if (!deleteMode) {
+                                  event.preventDefault();
+                                  dragExerciseOver(record.id, exercise.id);
+                                }
+                              }}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                finishExerciseDrag();
+                              }}
+                            >
                               <div className="history-exercise__header">
                                 <div className="exercise-title-row">
                                   <div className="exercise-title-main">
@@ -752,21 +872,37 @@ function App() {
                                     </button>
                                   </div>
                                   <button
-                                    className={
-                                      collapsedExercises[exercise.id]
-                                        ? "exercise-collapse-button is-collapsed"
-                                        : "exercise-collapse-button is-expanded"
+                                    className="exercise-drag-handle"
+                                    draggable={!deleteMode}
+                                    onDragStart={(event) => {
+                                      startExerciseDrag(record.id, exercise.id);
+                                      event.dataTransfer.effectAllowed = "move";
+                                      event.dataTransfer.setData("text/plain", exercise.id);
+                                    }}
+                                    onDragEnd={finishExerciseDrag}
+                                    onPointerDown={(event) => {
+                                      if (deleteMode) {
+                                        return;
+                                      }
+
+                                      event.currentTarget.setPointerCapture(event.pointerId);
+                                      startExerciseDrag(record.id, exercise.id);
+                                    }}
+                                    onPointerMove={(event) =>
+                                      dragExerciseOverPoint(event.clientX, event.clientY)
                                     }
-                                    onClick={() => toggleExercise(exercise.id)}
-                                    aria-label={collapsedExercises[exercise.id] ? "展开" : "收起"}
+                                    onPointerUp={finishExerciseDrag}
+                                    onPointerCancel={finishExerciseDrag}
+                                    aria-label="拖动排序"
                                   >
+                                    <span aria-hidden="true" />
+                                    <span aria-hidden="true" />
                                     <span aria-hidden="true" />
                                   </button>
                                 </div>
                               </div>
 
-                              {collapsedExercises[exercise.id] ? null : (
-                                <>
+                              <>
                                   {addLoadTarget === exercise.id && !deleteMode ? (
                                     <div className="quick-add-stack">
                                       <div className="quick-add-row">
@@ -1007,8 +1143,7 @@ function App() {
                                       ))
                                     )}
                                   </div>
-                                </>
-                              )}
+                              </>
 
                               <datalist id={`load-suggestions-${exercise.id}`}>
                                 {(loadSuggestionsByExercise[exercise.name.trim()] ?? []).map(
@@ -1051,7 +1186,7 @@ function App() {
             ref={importFileRef}
             className="hidden-file-picker"
             type="file"
-            accept="application/json,.json"
+            accept="text/plain,.txt,application/json,.json"
             onChange={(event) => {
               importBackup(event.target.files?.[0] ?? null);
               event.target.value = "";
