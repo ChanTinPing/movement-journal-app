@@ -4,7 +4,9 @@
 
 ## 功能演示
 
-<img src="docs/usage-screenshot.png" alt="运动日记使用截图" width="360">
+<p align="center">
+  <img src="docs/usage-screenshot.png" alt="运动日记使用截图" width="360">
+</p>
 
 - 点“今天 +”新建今天的训练。
 - 在日期里添加动作，例如“深蹲”“卧推”“引体向上”。
