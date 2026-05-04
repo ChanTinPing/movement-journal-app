@@ -488,9 +488,14 @@ function App() {
     setEditingLoadTarget(groupId);
   }
 
-  function saveEditedLoad(recordId: string, exerciseId: string, groupId: string) {
+  function saveEditedLoad(
+    recordId: string,
+    exerciseId: string,
+    groupId: string,
+    rawLabel?: string,
+  ) {
     const draftKey = `edit-load-${groupId}`;
-    const nextValue = (loadDrafts[draftKey] ?? "").trim();
+    const nextValue = (rawLabel ?? loadDrafts[draftKey] ?? "").trim();
 
     updateRecord(recordId, (record) => ({
       ...record,
@@ -907,6 +912,7 @@ function App() {
                                     <div className="quick-add-stack">
                                       <div className="quick-add-row">
                                         <input
+                                          className="load-type-input"
                                           type="text"
                                           placeholder="负载"
                                           list={`load-suggestions-${exercise.id}`}
@@ -955,7 +961,8 @@ function App() {
                                             {editingLoadTarget === group.id ? (
                                               <div className="load-edit-stack">
                                                 <input
-                                                  className="load-inline-input"
+                                                  className="load-inline-input load-type-input"
+                                                  list={`load-suggestions-${exercise.id}`}
                                                   value={loadDrafts[`edit-load-${group.id}`] ?? ""}
                                                   onChange={(event) =>
                                                     setLoadDrafts((current) => ({
@@ -975,18 +982,25 @@ function App() {
                                                   autoFocus
                                                 />
                                                 <div className="load-presets load-presets--inline">
-                                                  <button
-                                                    className="load-preset-button"
-                                                    onMouseDown={(event) => event.preventDefault()}
-                                                    onClick={() => {
-                                                      setLoadDrafts((current) => ({
-                                                        ...current,
-                                                        [`edit-load-${group.id}`]: "默认",
-                                                      }));
-                                                    }}
-                                                  >
-                                                    默认
-                                                  </button>
+                                                  {(loadSuggestionsByExercise[exercise.name.trim()] ?? ["默认"]).map(
+                                                    (label) => (
+                                                      <button
+                                                        className="load-preset-button"
+                                                        key={`${group.id}-${label}`}
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={() =>
+                                                          saveEditedLoad(
+                                                            record.id,
+                                                            exercise.id,
+                                                            group.id,
+                                                            label,
+                                                          )
+                                                        }
+                                                      >
+                                                        {label}
+                                                      </button>
+                                                    ),
+                                                  )}
                                                 </div>
                                               </div>
                                             ) : (

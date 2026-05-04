@@ -260,6 +260,11 @@ input:focus {
   white-space: nowrap;
 }
 
+.load-type-input {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
 .load-inline-group {
   min-width: 0;
   flex: 1;

@@ -137,6 +137,71 @@ test("可以删除整个动作和负荷行", async ({ page }) => {
   expect(saved[0].exercises.map((exercise: { name: string }) => exercise.name)).toEqual(["深蹲"]);
 });
 
+test("编辑负荷类型时可以使用同动作的历史选项", async ({ page }) => {
+  const records = [
+    {
+      id: "history-day",
+      date: "2026-04-20",
+      updatedAt: "2026-04-20T10:00:00.000Z",
+      exercises: [
+        {
+          id: "history-squat",
+          name: "深蹲",
+          loadGroups: [
+            {
+              id: "history-squat-20",
+              label: "20kg",
+              entries: ["8"],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "today-day",
+      date: today,
+      updatedAt: "2026-05-04T10:00:00.000Z",
+      exercises: [
+        {
+          id: "today-squat",
+          name: "深蹲",
+          loadGroups: [
+            {
+              id: "today-squat-default",
+              label: "",
+              entries: ["5"],
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  await page.evaluate(
+    ({ seedRecords }) => {
+      localStorage.setItem("movement-journal-records", JSON.stringify(seedRecords));
+    },
+    { seedRecords: records },
+  );
+  await page.reload();
+
+  const currentLoadBlock = page.locator(".history-card").first().locator(".history-load-block").first();
+
+  await currentLoadBlock.getByRole("button", { name: "默认" }).click();
+  const editStack = currentLoadBlock.locator(".load-edit-stack");
+  await expect(editStack.getByRole("button", { name: "20kg" })).toBeVisible();
+
+  await editStack.getByRole("button", { name: "20kg" }).click();
+  await expect(currentLoadBlock.getByRole("button", { name: "20kg" })).toBeVisible();
+
+  const savedLabels = await page.evaluate((recordDate) =>
+    JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]")
+      .find((record: { date: string }) => record.date === recordDate)
+      .exercises[0].loadGroups.map((group: { label: string }) => group.label),
+  today);
+  expect(savedLabels).toEqual(["20kg"]);
+});
+
 test("可以在同一天拖动动作排序", async ({ page }) => {
   const record = {
     id: "sort-day",
