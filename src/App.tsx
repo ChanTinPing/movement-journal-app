@@ -962,7 +962,6 @@ function App() {
                                               <div className="load-edit-stack">
                                                 <input
                                                   className="load-inline-input load-type-input"
-                                                  list={`load-suggestions-${exercise.id}`}
                                                   value={loadDrafts[`edit-load-${group.id}`] ?? ""}
                                                   onChange={(event) =>
                                                     setLoadDrafts((current) => ({

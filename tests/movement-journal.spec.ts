@@ -189,7 +189,23 @@ test("编辑负荷类型时可以使用同动作的历史选项", async ({ page 
 
   await currentLoadBlock.getByRole("button", { name: "默认" }).click();
   const editStack = currentLoadBlock.locator(".load-edit-stack");
+  await expect(editStack.locator(".load-inline-input")).not.toHaveAttribute("list", /.+/);
   await expect(editStack.getByRole("button", { name: "20kg" })).toBeVisible();
+  const editLayout = await currentLoadBlock.evaluate((block) => {
+    const input = block.querySelector(".load-inline-input")?.getBoundingClientRect();
+    const anchor = block.querySelector(".insert-anchor-button")?.getBoundingClientRect();
+    return input && anchor
+      ? {
+          inputRight: input.right,
+          inputTop: input.top,
+          anchorLeft: anchor.left,
+          anchorTop: anchor.top,
+        }
+      : null;
+  });
+  expect(editLayout).toBeTruthy();
+  expect(editLayout!.inputRight).toBeLessThanOrEqual(editLayout!.anchorLeft);
+  expect(Math.abs(editLayout!.inputTop - editLayout!.anchorTop)).toBeLessThan(12);
 
   await editStack.getByRole("button", { name: "20kg" }).click();
   await expect(currentLoadBlock.getByRole("button", { name: "20kg" })).toBeVisible();
