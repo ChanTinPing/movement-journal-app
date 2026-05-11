@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { createBackupPayload, loadRecords, parseBackupFile, saveRecords } from "./storage";
 import { DayRecord, Exercise, LoadGroup } from "./types";
 import {
@@ -54,14 +55,14 @@ function shiftMonth(monthKey: string, offset: number) {
   }).format(next);
 }
 
-function cloneExercise(exercise: Exercise): Exercise {
+function cloneExerciseShape(exercise: Exercise): Exercise {
   return {
     id: createId("exercise"),
     name: exercise.name,
     loadGroups: exercise.loadGroups.map((group) => ({
       id: createId("load"),
       label: group.label,
-      entries: [...group.entries],
+      entries: [],
     })),
   };
 }
@@ -69,8 +70,10 @@ function cloneExercise(exercise: Exercise): Exercise {
 function App() {
   const [records, setRecords] = useState<DayRecord[]>(() => loadRecords());
   const [exerciseDrafts, setExerciseDrafts] = useState<DraftMap>({});
+  const [titleDrafts, setTitleDrafts] = useState<DraftMap>({});
   const [loadDrafts, setLoadDrafts] = useState<DraftMap>({});
   const [entryDrafts, setEntryDrafts] = useState<DraftMap>({});
+  const [editingTitleTarget, setEditingTitleTarget] = useState<string | null>(null);
   const [editingLoadTarget, setEditingLoadTarget] = useState<string | null>(null);
   const [addExerciseTarget, setAddExerciseTarget] = useState<string | null>(null);
   const [addLoadTarget, setAddLoadTarget] = useState<string | null>(null);
@@ -85,6 +88,8 @@ function App() {
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const recordRefs = useRef<Record<string, HTMLElement | null>>({});
   const dragExerciseRef = useRef<DraggingExercise>(null);
+  const calendarSwipeRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const suppressCalendarClickRef = useRef(false);
 
   useEffect(() => {
     saveRecords(records);
@@ -108,6 +113,8 @@ function App() {
             ".quick-add-stack",
             ".inline-insert-wrap",
             ".tail-insert-row",
+            ".date-subtitle-input",
+            ".date-subtitle-button",
             ".date-add-button",
             ".exercise-add-button",
             ".entry-add-button",
@@ -181,17 +188,17 @@ function App() {
     [copyableRecords],
   );
 
-  const workoutDateSet = useMemo(
-    () =>
-      new Set(
-        records
-          .filter((record) => record.exercises.some((exercise) => exercise.loadGroups.length > 0))
-          .map((record) => record.date),
-      ),
-    [records],
-  );
+  const calendarDateSet = useMemo(() => new Set(records.map((record) => record.date)), [records]);
 
   const calendarCells = useMemo(() => buildCalendarCells(calendarMonth), [calendarMonth]);
+
+  const recordsByDate = useMemo(() => {
+    const map = new Map<string, DayRecord>();
+    for (const record of records) {
+      map.set(record.date, record);
+    }
+    return map;
+  }, [records]);
 
   function touchRecord(record: DayRecord): DayRecord {
     return {
@@ -348,13 +355,62 @@ function App() {
     setCalendarMode(null);
   }
 
+  function startCalendarSwipe(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+
+    calendarSwipeRef.current = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
+  }
+
+  function finishCalendarSwipe(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = calendarSwipeRef.current;
+    calendarSwipeRef.current = null;
+    if (!start) {
+      return;
+    }
+
+    const deltaX = event.clientX - start.clientX;
+    const deltaY = event.clientY - start.clientY;
+    if (Math.abs(deltaX) < 52 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
+      return;
+    }
+
+    suppressCalendarClickRef.current = true;
+    setCalendarMonth((current) => shiftMonth(current, deltaX < 0 ? 1 : -1));
+  }
+
+  function cancelCalendarSwipe() {
+    calendarSwipeRef.current = null;
+  }
+
+  function selectCalendarDate(date: string, selectable: boolean) {
+    if (suppressCalendarClickRef.current) {
+      suppressCalendarClickRef.current = false;
+      return;
+    }
+
+    if (!selectable) {
+      return;
+    }
+
+    if (calendarMode === "copy") {
+      copyRecordToToday(date);
+    } else {
+      openRecordFromCalendar(date);
+    }
+  }
+
   function copyRecordToToday(sourceDate: string) {
     const sourceRecord = records.find((record) => record.date === sourceDate);
     if (!sourceRecord || sourceDate === today) {
       return;
     }
 
-    const copiedExercises = sourceRecord.exercises.map(cloneExercise);
+    const copiedExercises = sourceRecord.exercises.map(cloneExerciseShape);
     const existingToday = records.find((record) => record.date === today);
 
     if (existingToday) {
@@ -377,6 +433,26 @@ function App() {
 
     setAddExerciseTarget(null);
     closeCalendar();
+  }
+
+  function startEditingTitle(record: DayRecord) {
+    setTitleDrafts((current) => ({
+      ...current,
+      [`title-${record.id}`]: record.title ?? "",
+    }));
+    setEditingTitleTarget(record.id);
+  }
+
+  function saveEditedTitle(recordId: string) {
+    const draftKey = `title-${recordId}`;
+    const nextTitle = titleDrafts[draftKey]?.trim() ?? "";
+
+    updateRecord(recordId, (record) => ({
+      ...record,
+      title: nextTitle || undefined,
+    }));
+
+    setEditingTitleTarget(null);
   }
 
   function openRecordFromCalendar(date: string) {
@@ -783,6 +859,38 @@ function App() {
                       <div className="history-card__head">
                         <div className="date-cluster">
                           <strong className="date-title">{formatDateHeadline(record.date)}</strong>
+                          {editingTitleTarget === record.id ? (
+                            <input
+                              className="date-subtitle-input"
+                              value={titleDrafts[`title-${record.id}`] ?? ""}
+                              onChange={(event) =>
+                                setTitleDrafts((current) => ({
+                                  ...current,
+                                  [`title-${record.id}`]: event.target.value,
+                                }))
+                              }
+                              onBlur={() => saveEditedTitle(record.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  saveEditedTitle(record.id);
+                                }
+                              }}
+                              placeholder="标题"
+                              aria-label={`${formatDateHeadline(record.date)} 小标题`}
+                              autoFocus
+                            />
+                          ) : (
+                            <button
+                              className={
+                                record.title ? "date-subtitle-button" : "date-subtitle-button is-empty"
+                              }
+                              onClick={() => startEditingTitle(record)}
+                              aria-label={`${formatDateHeadline(record.date)} 小标题`}
+                            >
+                              {record.title || "标题"}
+                            </button>
+                          )}
                           <button
                             className={deleteMode ? "date-delete-button" : "date-add-button"}
                             onClick={() =>
@@ -1242,7 +1350,12 @@ function App() {
       {calendarMode ? (
         <div className="calendar-modal" role="dialog" aria-modal="true">
           <div className="calendar-backdrop" onClick={closeCalendar} />
-          <div className="calendar-panel">
+          <div
+            className="calendar-panel"
+            onPointerDown={startCalendarSwipe}
+            onPointerUp={finishCalendarSwipe}
+            onPointerCancel={cancelCalendarSwipe}
+          >
             <div className="calendar-panel__header">
               <strong>{calendarMode === "copy" ? "复制到今天" : "运动日历"}</strong>
               <button className="calendar-close" onClick={closeCalendar}>
@@ -1265,11 +1378,12 @@ function App() {
             </div>
             <div className="calendar-grid">
               {calendarCells.map((cell) => {
+                const record = recordsByDate.get(cell.date);
                 const selectable =
                   cell.inMonth &&
                   (calendarMode === "copy"
                     ? copyableDateSet.has(cell.date)
-                    : workoutDateSet.has(cell.date));
+                    : calendarDateSet.has(cell.date));
                 return (
                   <button
                     key={cell.date}
@@ -1280,15 +1394,13 @@ function App() {
                           ? "calendar-day"
                           : "calendar-day calendar-day--outside"
                     }
-                    onClick={() =>
-                      selectable &&
-                      (calendarMode === "copy"
-                        ? copyRecordToToday(cell.date)
-                        : openRecordFromCalendar(cell.date))
-                    }
+                    onClick={() => selectCalendarDate(cell.date, selectable)}
                     disabled={!selectable}
                   >
-                    {cell.day}
+                    <span className="calendar-day__number">{cell.day}</span>
+                    {cell.inMonth && record?.title ? (
+                      <span className="calendar-day__title">{record.title}</span>
+                    ) : null}
                   </button>
                 );
               })}

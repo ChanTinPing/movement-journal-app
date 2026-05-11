@@ -13,6 +13,7 @@ export type Exercise = {
 export type DayRecord = {
   id: string;
   date: string;
+  title?: string;
   exercises: Exercise[];
   updatedAt: string;
 };

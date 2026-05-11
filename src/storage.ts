@@ -49,10 +49,17 @@ export function isDayRecord(value: unknown): value is DayRecord {
     return false;
   }
 
-  const record = value as { id?: unknown; date?: unknown; exercises?: unknown; updatedAt?: unknown };
+  const record = value as {
+    id?: unknown;
+    date?: unknown;
+    title?: unknown;
+    exercises?: unknown;
+    updatedAt?: unknown;
+  };
   return (
     typeof record.id === "string" &&
     /^\d{4}-\d{2}-\d{2}$/.test(record.date as string) &&
+    (record.title === undefined || typeof record.title === "string") &&
     typeof record.updatedAt === "string" &&
     Array.isArray(record.exercises) &&
     record.exercises.every(isExercise)

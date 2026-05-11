@@ -245,6 +245,15 @@ test("可以在同一天拖动动作排序", async ({ page }) => {
   await page.reload();
 
   const firstHandle = page.locator(".history-exercise .exercise-drag-handle").first();
+  const handleLineBoxes = await firstHandle.locator("span").evaluateAll((lines) =>
+    lines.map((line) => {
+      const rect = line.getBoundingClientRect();
+      return { centerY: rect.top + rect.height / 2 };
+    }),
+  );
+  expect(handleLineBoxes[1].centerY - handleLineBoxes[0].centerY).toBeLessThanOrEqual(4);
+  expect(handleLineBoxes[2].centerY - handleLineBoxes[1].centerY).toBeLessThanOrEqual(4);
+
   const lastExercise = page.locator(".history-exercise").nth(2);
   const start = await firstHandle.boundingBox();
   const end = await lastExercise.boundingBox();
@@ -283,6 +292,94 @@ test("可以在同一天拖动动作排序", async ({ page }) => {
   expect(saved).toEqual(["划船", "硬拉", "深蹲"]);
 });
 
+test("可以编辑日期小标题，并在日历中显示", async ({ page }) => {
+  await page.getByRole("button", { name: "今天 +" }).click();
+  await page.locator(".date-subtitle-button").click();
+  await page.locator(".date-subtitle-input").fill("上半身");
+  await page.locator(".date-subtitle-input").press("Enter");
+
+  await expect(page.locator(".date-subtitle-button")).toHaveText("上半身");
+  let saved = await page.evaluate(() => JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]"));
+  expect(saved[0].title).toBe("上半身");
+
+  await page.reload();
+  await expect(page.locator(".date-subtitle-button")).toHaveText("上半身");
+
+  await page.getByRole("button", { name: "日历" }).click();
+  const activeDay = page
+    .getByRole("dialog")
+    .locator(".calendar-day--active")
+    .filter({ hasText: `${Number(today.slice(8))}` });
+  await expect(activeDay.locator(".calendar-day__title")).toHaveText("上半身");
+
+  await activeDay.click();
+  saved = await page.evaluate(() => JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]"));
+  expect(saved[0].title).toBe("上半身");
+});
+
+test("可以左右滑动日历切换月份", async ({ page }) => {
+  const records = [
+    {
+      id: "calendar-april",
+      date: "2026-04-18",
+      title: "上半身",
+      updatedAt: "2026-04-18T10:00:00.000Z",
+      exercises: [
+        {
+          id: "calendar-april-exercise",
+          name: "硬拉",
+          loadGroups: [{ id: "calendar-april-load", label: "60kg", entries: ["5"] }],
+        },
+      ],
+    },
+    {
+      id: "calendar-march",
+      date: "2026-03-15",
+      title: "下半身",
+      updatedAt: "2026-03-15T10:00:00.000Z",
+      exercises: [
+        {
+          id: "calendar-march-exercise",
+          name: "深蹲",
+          loadGroups: [{ id: "calendar-march-load", label: "40kg", entries: ["8"] }],
+        },
+      ],
+    },
+  ];
+
+  await page.evaluate(
+    ({ seedRecords }) => {
+      localStorage.setItem("movement-journal-records", JSON.stringify(seedRecords));
+    },
+    { seedRecords: records },
+  );
+  await page.reload();
+
+  await page.getByRole("button", { name: "日历" }).click();
+  await expect(page.locator(".calendar-nav strong")).toHaveText("26 年 4 月");
+
+  const panel = page.locator(".calendar-panel");
+  const panelBox = await panel.boundingBox();
+  expect(panelBox).toBeTruthy();
+  const y = panelBox!.y + panelBox!.height / 2;
+  await panel.dispatchEvent("pointerdown", {
+    clientX: panelBox!.x + panelBox!.width * 0.35,
+    clientY: y,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+  await panel.dispatchEvent("pointerup", {
+    clientX: panelBox!.x + panelBox!.width * 0.72,
+    clientY: y,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+
+  await expect(page.locator(".calendar-nav strong")).toHaveText("26 年 3 月");
+  const marchDay = page.locator(".calendar-day--active").filter({ hasText: "15" });
+  await expect(marchDay.locator(".calendar-day__title")).toHaveText("下半身");
+});
+
 test("可以把历史记录复制到今天", async ({ page }) => {
   const sourceRecord = {
     id: "source-2026-03-18",
@@ -313,15 +410,18 @@ test("可以把历史记录复制到今天", async ({ page }) => {
 
   await page.getByRole("button", { name: "今天（复制）+" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByRole("button", { name: "18" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "18", exact: true }).click();
 
   await expect(page.getByText("引体向上")).toHaveCount(2);
-  const savedDates = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]").map(
-      (record: { date: string }) => record.date,
-    ),
+  const savedRecords = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]"),
   );
+  const savedDates = savedRecords.map((record: { date: string }) => record.date);
   expect(savedDates).toContain(today);
+  const todayRecord = savedRecords.find((record: { date: string }) => record.date === today);
+  expect(todayRecord.exercises[0].name).toBe("引体向上");
+  expect(todayRecord.exercises[0].loadGroups[0].label).toBe("");
+  expect(todayRecord.exercises[0].loadGroups[0].entries).toEqual([]);
 });
 
 test("可以查看运动日历，并导出导入本地备份", async ({ page }) => {
@@ -354,8 +454,9 @@ test("可以查看运动日历，并导出导入本地备份", async ({ page }) 
 
   await page.getByRole("button", { name: "日历" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByRole("button", { name: "18" })).toHaveClass(/calendar-day--active/);
-  await page.getByRole("button", { name: "18" }).click();
+  const calendarDay = page.getByRole("dialog").getByRole("button", { name: "18", exact: true });
+  await expect(calendarDay).toHaveClass(/calendar-day--active/);
+  await calendarDay.click();
   await expect(page.getByText("硬拉")).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
