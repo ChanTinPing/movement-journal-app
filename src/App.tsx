@@ -74,6 +74,7 @@ function App() {
   const [loadDrafts, setLoadDrafts] = useState<DraftMap>({});
   const [entryDrafts, setEntryDrafts] = useState<DraftMap>({});
   const [editingTitleTarget, setEditingTitleTarget] = useState<string | null>(null);
+  const [editingExerciseTarget, setEditingExerciseTarget] = useState<string | null>(null);
   const [editingLoadTarget, setEditingLoadTarget] = useState<string | null>(null);
   const [addExerciseTarget, setAddExerciseTarget] = useState<string | null>(null);
   const [addLoadTarget, setAddLoadTarget] = useState<string | null>(null);
@@ -81,6 +82,8 @@ function App() {
   const [collapsedDates, setCollapsedDates] = useState<Record<string, boolean>>({});
   const [editingEntryTarget, setEditingEntryTarget] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [exerciseHistoryMode, setExerciseHistoryMode] = useState(false);
+  const [selectedExerciseHistory, setSelectedExerciseHistory] = useState<string | null>(null);
   const [calendarMode, setCalendarMode] = useState<CalendarMode>(null);
   const [calendarMonth, setCalendarMonth] = useState(today.slice(0, 7));
   const [draggingExercise, setDraggingExercise] = useState<DraggingExercise>(null);
@@ -113,10 +116,13 @@ function App() {
             ".quick-add-stack",
             ".inline-insert-wrap",
             ".tail-insert-row",
+            ".title-edit-stack",
+            ".exercise-edit-stack",
             ".date-subtitle-input",
             ".date-subtitle-button",
             ".date-add-button",
             ".exercise-add-button",
+            ".exercise-history-button",
             ".entry-add-button",
             ".insert-anchor-button",
             ".insert-slash-button",
@@ -149,6 +155,13 @@ function App() {
           ),
         ),
       ).sort((left, right) => left.localeCompare(right, "zh-CN")),
+    [records],
+  );
+
+  const titleSuggestions = useMemo(
+    () =>
+      Array.from(new Set(records.map((record) => record.title?.trim()).filter(Boolean) as string[]))
+        .sort((left, right) => left.localeCompare(right, "zh-CN")),
     [records],
   );
 
@@ -199,6 +212,20 @@ function App() {
     }
     return map;
   }, [records]);
+
+  const exerciseHistoryRecords = useMemo(() => {
+    const selectedName = selectedExerciseHistory?.trim();
+    if (!selectedName) {
+      return [];
+    }
+
+    return sortedRecords
+      .map((record) => ({
+        ...record,
+        exercises: record.exercises.filter((exercise) => exercise.name.trim() === selectedName),
+      }))
+      .filter((record) => record.exercises.length > 0);
+  }, [selectedExerciseHistory, sortedRecords]);
 
   function touchRecord(record: DayRecord): DayRecord {
     return {
@@ -291,6 +318,10 @@ function App() {
   }
 
   function openAddExercise(recordId: string) {
+    if (exerciseHistoryMode) {
+      return;
+    }
+
     setAddExerciseTarget((current) => (current === recordId ? null : recordId));
     expandRecord(recordId);
   }
@@ -416,6 +447,7 @@ function App() {
     if (existingToday) {
       updateRecord(existingToday.id, (record) => ({
         ...record,
+        title: sourceRecord.title || record.title,
         exercises: [...record.exercises, ...copiedExercises],
       }));
       expandRecord(existingToday.id);
@@ -423,6 +455,7 @@ function App() {
       const nextRecord: DayRecord = {
         id: createId("day"),
         date: today,
+        title: sourceRecord.title,
         exercises: copiedExercises,
         updatedAt: new Date().toISOString(),
       };
@@ -443,9 +476,9 @@ function App() {
     setEditingTitleTarget(record.id);
   }
 
-  function saveEditedTitle(recordId: string) {
+  function saveEditedTitle(recordId: string, rawTitle?: string) {
     const draftKey = `title-${recordId}`;
-    const nextTitle = titleDrafts[draftKey]?.trim() ?? "";
+    const nextTitle = (rawTitle ?? titleDrafts[draftKey] ?? "").trim();
 
     updateRecord(recordId, (record) => ({
       ...record,
@@ -453,6 +486,36 @@ function App() {
     }));
 
     setEditingTitleTarget(null);
+  }
+
+  function startEditingExercise(exercise: Exercise) {
+    if (deleteMode || exerciseHistoryMode) {
+      return;
+    }
+
+    setExerciseDrafts((current) => ({
+      ...current,
+      [`edit-exercise-${exercise.id}`]: exercise.name,
+    }));
+    setEditingExerciseTarget(exercise.id);
+  }
+
+  function saveEditedExercise(recordId: string, exerciseId: string, rawName?: string) {
+    const draftKey = `edit-exercise-${exerciseId}`;
+    const nextName = (rawName ?? exerciseDrafts[draftKey] ?? "").trim();
+    if (!nextName) {
+      setEditingExerciseTarget(null);
+      return;
+    }
+
+    updateRecord(recordId, (record) => ({
+      ...record,
+      exercises: record.exercises.map((exercise) =>
+        exercise.id === exerciseId ? { ...exercise, name: nextName } : exercise,
+      ),
+    }));
+
+    setEditingExerciseTarget(null);
   }
 
   function openRecordFromCalendar(date: string) {
@@ -508,9 +571,15 @@ function App() {
     setAddLoadTarget(null);
     setInsertTarget(null);
     setCalendarMode(null);
+    setExerciseHistoryMode(false);
+    setSelectedExerciseHistory(null);
   }
 
   function addExercise(recordId: string) {
+    if (exerciseHistoryMode) {
+      return;
+    }
+
     const fieldId = `exercise-${recordId}`;
     const name = exerciseDrafts[fieldId]?.trim();
     if (!name) {
@@ -534,6 +603,10 @@ function App() {
   }
 
   function addLoadGroup(recordId: string, exerciseId: string, rawLabel?: string) {
+    if (exerciseHistoryMode) {
+      return;
+    }
+
     const fieldId = `load-${exerciseId}`;
     const label = (rawLabel ?? loadDrafts[fieldId] ?? "").trim();
     if (!label) {
@@ -593,6 +666,10 @@ function App() {
   }
 
   function toggleInsertTarget(groupId: string, index: number) {
+    if (exerciseHistoryMode) {
+      return;
+    }
+
     setInsertTarget((current) =>
       current?.groupId === groupId && current.index === index ? null : { groupId, index },
     );
@@ -604,6 +681,10 @@ function App() {
     loadGroupId: string,
     index: number,
   ) {
+    if (exerciseHistoryMode) {
+      return;
+    }
+
     const fieldId = `entry-${loadGroupId}-${index}`;
     const value = entryDrafts[fieldId]?.trim();
     if (!value) {
@@ -719,6 +800,36 @@ function App() {
     setCollapsedDates((current) => ({ ...current, [recordId]: !current[recordId] }));
   }
 
+  function toggleExerciseHistoryMode() {
+    setExerciseHistoryMode((current) => {
+      const next = !current;
+      if (next) {
+        setDeleteMode(false);
+        setAddExerciseTarget(null);
+        setAddLoadTarget(null);
+        setInsertTarget(null);
+        setEditingTitleTarget(null);
+        setEditingExerciseTarget(null);
+        setEditingLoadTarget(null);
+        setEditingEntryTarget(null);
+        setCalendarMode(null);
+      } else {
+        setSelectedExerciseHistory(null);
+      }
+      return next;
+    });
+  }
+
+  function showExerciseHistory(exerciseName: string) {
+    setSelectedExerciseHistory(exerciseName.trim());
+    setAddExerciseTarget(null);
+    setAddLoadTarget(null);
+    setInsertTarget(null);
+    setEditingExerciseTarget(null);
+    setEditingLoadTarget(null);
+    setEditingEntryTarget(null);
+  }
+
   function removeDate(recordId: string) {
     const record = records.find((item) => item.id === recordId);
     if (!record) {
@@ -823,25 +934,86 @@ function App() {
       <div className="app-frame">
         <header className="app-header">
           <h1>运动日记</h1>
-          <button
-            className={deleteMode ? "delete-toggle delete-toggle--active" : "delete-toggle"}
-            onClick={() => {
-              setDeleteMode((current) => !current);
-              setAddExerciseTarget(null);
-              setAddLoadTarget(null);
-              setInsertTarget(null);
-              setCalendarMode(null);
-              finishExerciseDrag();
-            }}
-          >
-            删除
-          </button>
+          <div className="mode-actions">
+            <button
+              className={deleteMode ? "delete-toggle delete-toggle--active" : "delete-toggle"}
+              onClick={() => {
+                setDeleteMode((current) => !current);
+                setExerciseHistoryMode(false);
+                setSelectedExerciseHistory(null);
+                setAddExerciseTarget(null);
+                setAddLoadTarget(null);
+                setInsertTarget(null);
+                setCalendarMode(null);
+                finishExerciseDrag();
+              }}
+            >
+              删除
+            </button>
+            <button
+              className={
+                exerciseHistoryMode ? "history-toggle history-toggle--active" : "history-toggle"
+              }
+              onClick={toggleExerciseHistoryMode}
+            >
+              历史
+            </button>
+          </div>
         </header>
 
         <main className="screen-body">
-          {monthSections.length === 0 ? (
+          {exerciseHistoryMode && selectedExerciseHistory ? (
+            <section className="history-focus">
+              <div className="history-focus__head">
+                <strong>{selectedExerciseHistory}</strong>
+                <span>{exerciseHistoryRecords.length} 天</span>
+              </div>
+              <div className="history-list">
+                {exerciseHistoryRecords.map((record) => (
+                  <article className="history-card" key={`history-${record.id}`}>
+                    <div className="history-card__head history-card__head--plain">
+                      <div className="date-cluster">
+                        <strong className="date-title">{formatDateHeadline(record.date)}</strong>
+                        {record.title ? (
+                          <span className="date-subtitle-static">{record.title}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="history-card__items">
+                      {record.exercises.map((exercise) => (
+                        <section className="history-exercise" key={exercise.id}>
+                          <div className="history-exercise__loads">
+                            {exercise.loadGroups.map((group) => (
+                              <div className="history-load-block" key={group.id}>
+                                <div className="history-load-row">
+                                  <span className="load-label-static">{group.label || "默认"}</span>
+                                  <div className="load-inline-group">
+                                    <div className="entry-edit-row">
+                                      {group.entries.length > 0 ? (
+                                        group.entries.map((entry, entryIndex) => (
+                                          <span className="entry-chip-static" key={`${group.id}-${entryIndex}`}>
+                                            {entry}
+                                          </span>
+                                        ))
+                                      ) : (
+                                        <span className="muted">无数字</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : monthSections.length === 0 ? (
             <div className="history-card">
-              <p className="muted">无记录</p>
+              <p className="muted">{exerciseHistoryMode ? "先添加记录，再点运动旁边的历史符号。" : "无记录"}</p>
             </div>
           ) : (
             monthSections.map((section) => (
@@ -860,26 +1032,42 @@ function App() {
                         <div className="date-cluster">
                           <strong className="date-title">{formatDateHeadline(record.date)}</strong>
                           {editingTitleTarget === record.id ? (
-                            <input
-                              className="date-subtitle-input"
-                              value={titleDrafts[`title-${record.id}`] ?? ""}
-                              onChange={(event) =>
-                                setTitleDrafts((current) => ({
-                                  ...current,
-                                  [`title-${record.id}`]: event.target.value,
-                                }))
-                              }
-                              onBlur={() => saveEditedTitle(record.id)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  saveEditedTitle(record.id);
+                            <div className="title-edit-stack">
+                              <input
+                                className="date-subtitle-input"
+                                value={titleDrafts[`title-${record.id}`] ?? ""}
+                                onChange={(event) =>
+                                  setTitleDrafts((current) => ({
+                                    ...current,
+                                    [`title-${record.id}`]: event.target.value,
+                                  }))
                                 }
-                              }}
-                              placeholder="标题"
-                              aria-label={`${formatDateHeadline(record.date)} 小标题`}
-                              autoFocus
-                            />
+                                onBlur={() => saveEditedTitle(record.id)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    saveEditedTitle(record.id);
+                                  }
+                                }}
+                                placeholder="标题"
+                                aria-label={`${formatDateHeadline(record.date)} 小标题`}
+                                autoFocus
+                              />
+                              {titleSuggestions.length > 0 ? (
+                                <div className="title-presets">
+                                  {titleSuggestions.map((title) => (
+                                    <button
+                                      className="title-preset-button"
+                                      key={`${record.id}-${title}`}
+                                      onMouseDown={(event) => event.preventDefault()}
+                                      onClick={() => saveEditedTitle(record.id, title)}
+                                    >
+                                      {title}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
                           ) : (
                             <button
                               className={
@@ -891,14 +1079,16 @@ function App() {
                               {record.title || "标题"}
                             </button>
                           )}
-                          <button
-                            className={deleteMode ? "date-delete-button" : "date-add-button"}
-                            onClick={() =>
-                              deleteMode ? removeDate(record.id) : openAddExercise(record.id)
-                            }
-                          >
-                            {deleteMode ? "−" : "+"}
-                          </button>
+                          {exerciseHistoryMode ? null : (
+                            <button
+                              className={deleteMode ? "date-delete-button" : "date-add-button"}
+                              onClick={() =>
+                                deleteMode ? removeDate(record.id) : openAddExercise(record.id)
+                              }
+                            >
+                              {deleteMode ? "−" : "+"}
+                            </button>
+                          )}
                         </div>
                         <button
                           className={
@@ -966,27 +1156,79 @@ function App() {
                               <div className="history-exercise__header">
                                 <div className="exercise-title-row">
                                   <div className="exercise-title-main">
-                                    <div className="history-exercise__name">{exercise.name}</div>
+                                    {editingExerciseTarget === exercise.id ? (
+                                      <div className="exercise-edit-stack">
+                                        <input
+                                          className="exercise-inline-input"
+                                          value={exerciseDrafts[`edit-exercise-${exercise.id}`] ?? ""}
+                                          onChange={(event) =>
+                                            setExerciseDrafts((current) => ({
+                                              ...current,
+                                              [`edit-exercise-${exercise.id}`]: event.target.value,
+                                            }))
+                                          }
+                                          onBlur={() => saveEditedExercise(record.id, exercise.id)}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter") {
+                                              event.preventDefault();
+                                              saveEditedExercise(record.id, exercise.id);
+                                            }
+                                          }}
+                                          aria-label="运动类型"
+                                          autoFocus
+                                        />
+                                        {exerciseSuggestions.length > 0 ? (
+                                          <div className="exercise-presets">
+                                            {exerciseSuggestions.map((name) => (
+                                              <button
+                                                className="exercise-preset-button"
+                                                key={`${exercise.id}-${name}`}
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={() =>
+                                                  saveEditedExercise(record.id, exercise.id, name)
+                                                }
+                                              >
+                                                {name}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                      <button
+                                        className="history-exercise__name"
+                                        onClick={() => startEditingExercise(exercise)}
+                                      >
+                                        {exercise.name}
+                                      </button>
+                                    )}
                                     <button
                                       className={
                                         deleteMode
                                           ? "exercise-delete-button"
+                                          : exerciseHistoryMode
+                                            ? "exercise-history-button"
                                           : "exercise-add-button"
                                       }
                                       onClick={() =>
                                         deleteMode
                                           ? removeExercise(record.id, exercise.id)
-                                          : setAddLoadTarget((current) =>
-                                              current === exercise.id ? null : exercise.id,
-                                            )
+                                          : exerciseHistoryMode
+                                            ? showExerciseHistory(exercise.name)
+                                            : setAddLoadTarget((current) =>
+                                                current === exercise.id ? null : exercise.id,
+                                              )
+                                      }
+                                      aria-label={
+                                        exerciseHistoryMode ? `查看${exercise.name}历史` : undefined
                                       }
                                     >
-                                      {deleteMode ? "−" : "+"}
+                                      {deleteMode ? "−" : exerciseHistoryMode ? "≡" : "+"}
                                     </button>
                                   </div>
                                   <button
                                     className="exercise-drag-handle"
-                                    draggable={!deleteMode}
+                                    draggable={!deleteMode && !exerciseHistoryMode}
                                     onDragStart={(event) => {
                                       startExerciseDrag(record.id, exercise.id);
                                       event.dataTransfer.effectAllowed = "move";
@@ -994,7 +1236,7 @@ function App() {
                                     }}
                                     onDragEnd={finishExerciseDrag}
                                     onPointerDown={(event) => {
-                                      if (deleteMode) {
+                                      if (deleteMode || exerciseHistoryMode) {
                                         return;
                                       }
 
@@ -1016,7 +1258,7 @@ function App() {
                               </div>
 
                               <>
-                                  {addLoadTarget === exercise.id && !deleteMode ? (
+                                  {addLoadTarget === exercise.id && !deleteMode && !exerciseHistoryMode ? (
                                     <div className="quick-add-stack">
                                       <div className="quick-add-row">
                                         <input
@@ -1114,6 +1356,7 @@ function App() {
                                               <button
                                                 className="load-label-button"
                                                 onClick={() =>
+                                                  !exerciseHistoryMode &&
                                                   startEditingLoad(group.id, group.label || "默认")
                                                 }
                                               >
@@ -1122,12 +1365,14 @@ function App() {
                                             )}
 
                                             <div className="load-inline-group">
-                                              <button
-                                                className="insert-anchor-button"
-                                                onClick={() => toggleInsertTarget(group.id, 0)}
-                                              >
-                                                |
-                                              </button>
+                                              {exerciseHistoryMode ? null : (
+                                                <button
+                                                  className="insert-anchor-button"
+                                                  onClick={() => toggleInsertTarget(group.id, 0)}
+                                                >
+                                                  |
+                                                </button>
+                                              )}
                                               <div className="entry-edit-row">
                                                 {renderInsertInput(record.id, exercise.id, group.id, 0)}
                                                 {group.entries.map((entry, entryIndex) => {
@@ -1183,13 +1428,15 @@ function App() {
                                                                   entryIndex,
                                                                   entry,
                                                                 )
-                                                              : startEditingEntry(entryId, entry)
+                                                              : !exerciseHistoryMode &&
+                                                                startEditingEntry(entryId, entry)
                                                           }
                                                         >
                                                           {entry}
                                                         </button>
                                                       )}
-                                                      {entryIndex < group.entries.length - 1 ? (
+                                                      {entryIndex < group.entries.length - 1 &&
+                                                      !exerciseHistoryMode ? (
                                                         <>
                                                           <button
                                                             className="insert-slash-button"
@@ -1210,27 +1457,29 @@ function App() {
                                                     </span>
                                                   );
                                                 })}
-                                                <button
-                                                  className={
-                                                    deleteMode
-                                                      ? "load-delete-button"
-                                                      : "entry-add-button entry-add-button--tail"
-                                                  }
-                                                  onClick={() =>
-                                                    deleteMode
-                                                      ? removeLoadGroup(
-                                                          record.id,
-                                                          exercise.id,
-                                                          group.id,
-                                                        )
-                                                      : toggleInsertTarget(
-                                                          group.id,
-                                                          group.entries.length,
-                                                        )
-                                                  }
-                                                >
-                                                  {deleteMode ? "−" : "+"}
-                                                </button>
+                                                {exerciseHistoryMode ? null : (
+                                                  <button
+                                                    className={
+                                                      deleteMode
+                                                        ? "load-delete-button"
+                                                        : "entry-add-button entry-add-button--tail"
+                                                    }
+                                                    onClick={() =>
+                                                      deleteMode
+                                                        ? removeLoadGroup(
+                                                            record.id,
+                                                            exercise.id,
+                                                            group.id,
+                                                          )
+                                                        : toggleInsertTarget(
+                                                            group.id,
+                                                            group.entries.length,
+                                                          )
+                                                    }
+                                                  >
+                                                    {deleteMode ? "−" : "+"}
+                                                  </button>
+                                                )}
                                               </div>
                                             </div>
                                           </div>
@@ -1398,9 +1647,9 @@ function App() {
                     disabled={!selectable}
                   >
                     <span className="calendar-day__number">{cell.day}</span>
-                    {cell.inMonth && record?.title ? (
-                      <span className="calendar-day__title">{record.title}</span>
-                    ) : null}
+                    <span className="calendar-day__title">
+                      {cell.inMonth && record?.title ? record.title : ""}
+                    </span>
                   </button>
                 );
               })}

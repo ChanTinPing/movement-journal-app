@@ -317,6 +317,147 @@ test("可以编辑日期小标题，并在日历中显示", async ({ page }) => 
   expect(saved[0].title).toBe("上半身");
 });
 
+test("日期小标题可以从历史候选中选择", async ({ page }) => {
+  const records = [
+    {
+      id: "title-history-day",
+      date: "2026-04-20",
+      title: "上半身",
+      updatedAt: "2026-04-20T10:00:00.000Z",
+      exercises: [
+        {
+          id: "title-history-exercise",
+          name: "卧推",
+          loadGroups: [{ id: "title-history-load", label: "40kg", entries: ["8"] }],
+        },
+      ],
+    },
+    {
+      id: "title-today-day",
+      date: today,
+      updatedAt: "2026-05-04T10:00:00.000Z",
+      exercises: [
+        {
+          id: "title-today-exercise",
+          name: "划船",
+          loadGroups: [{ id: "title-today-load", label: "", entries: ["10"] }],
+        },
+      ],
+    },
+  ];
+
+  await page.evaluate(
+    ({ seedRecords }) => {
+      localStorage.setItem("movement-journal-records", JSON.stringify(seedRecords));
+    },
+    { seedRecords: records },
+  );
+  await page.reload();
+
+  const todayCard = page.locator(".history-card").first();
+  await todayCard.locator(".date-subtitle-button").click();
+  await expect(todayCard.getByRole("button", { name: "上半身" })).toBeVisible();
+  await todayCard.getByRole("button", { name: "上半身" }).click();
+  await expect(todayCard.locator(".date-subtitle-button")).toHaveText("上半身");
+
+  const savedTitle = await page.evaluate((recordDate) =>
+    JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]").find(
+      (record: { date: string }) => record.date === recordDate,
+    ).title,
+  today);
+  expect(savedTitle).toBe("上半身");
+});
+
+test("运动类型可以编辑，并可按运动类型查看全部历史", async ({ page }) => {
+  const records = [
+    {
+      id: "exercise-history-new",
+      date: today,
+      updatedAt: "2026-05-04T10:00:00.000Z",
+      exercises: [
+        {
+          id: "exercise-history-new-squat",
+          name: "深蹲",
+          loadGroups: [{ id: "exercise-history-new-squat-load", label: "60kg", entries: ["5"] }],
+        },
+      ],
+    },
+    {
+      id: "exercise-history-old",
+      date: "2026-04-20",
+      updatedAt: "2026-04-20T10:00:00.000Z",
+      exercises: [
+        {
+          id: "exercise-history-old-squat",
+          name: "深蹲",
+          loadGroups: [{ id: "exercise-history-old-squat-load", label: "50kg", entries: ["8"] }],
+        },
+        {
+          id: "exercise-history-old-row",
+          name: "划船",
+          loadGroups: [{ id: "exercise-history-old-row-load", label: "", entries: ["10"] }],
+        },
+      ],
+    },
+    {
+      id: "exercise-history-name-source",
+      date: "2026-03-16",
+      updatedAt: "2026-03-16T10:00:00.000Z",
+      exercises: [
+        {
+          id: "exercise-history-name-source-press",
+          name: "卧推",
+          loadGroups: [{ id: "exercise-history-name-source-load", label: "40kg", entries: ["8"] }],
+        },
+      ],
+    },
+  ];
+
+  await page.evaluate(
+    ({ seedRecords }) => {
+      localStorage.setItem("movement-journal-records", JSON.stringify(seedRecords));
+    },
+    { seedRecords: records },
+  );
+  await page.reload();
+
+  const todayExercise = page.locator(".history-card").first().locator(".history-exercise").first();
+  await todayExercise.getByRole("button", { name: "深蹲" }).click();
+  await expect(todayExercise.locator(".exercise-inline-input")).toHaveValue("深蹲");
+  await expect(todayExercise.getByRole("button", { name: "卧推" })).toBeVisible();
+  await todayExercise.getByRole("button", { name: "卧推" }).click();
+  await expect(todayExercise.getByRole("button", { name: "卧推" })).toBeVisible();
+
+  let savedNames = await page.evaluate((recordDate) =>
+    JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]")
+      .find((record: { date: string }) => record.date === recordDate)
+      .exercises.map((exercise: { name: string }) => exercise.name),
+  today);
+  expect(savedNames).toEqual(["卧推"]);
+
+  await todayExercise.getByRole("button", { name: "卧推" }).click();
+  await todayExercise.locator(".exercise-inline-input").fill("深蹲");
+  await todayExercise.locator(".exercise-inline-input").press("Enter");
+  savedNames = await page.evaluate((recordDate) =>
+    JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]")
+      .find((record: { date: string }) => record.date === recordDate)
+      .exercises.map((exercise: { name: string }) => exercise.name),
+  today);
+  expect(savedNames).toEqual(["深蹲"]);
+
+  await page.getByRole("button", { name: "历史" }).click();
+  await expect(page.locator(".date-add-button")).toHaveCount(0);
+  await expect(page.locator(".entry-add-button")).toHaveCount(0);
+  await expect(page.locator(".exercise-history-button").first()).toHaveText("≡");
+  await page.locator(".history-card").first().locator(".exercise-history-button").click();
+
+  await expect(page.locator(".history-focus__head")).toContainText("深蹲");
+  await expect(page.locator(".history-focus__head")).toContainText("2 天");
+  await expect(page.getByText("60kg")).toBeVisible();
+  await expect(page.getByText("50kg")).toBeVisible();
+  await expect(page.getByText("划船")).toBeHidden();
+});
+
 test("可以左右滑动日历切换月份", async ({ page }) => {
   const records = [
     {
@@ -358,6 +499,47 @@ test("可以左右滑动日历切换月份", async ({ page }) => {
   await page.getByRole("button", { name: "日历" }).click();
   await expect(page.locator(".calendar-nav strong")).toHaveText("26 年 4 月");
 
+  const calendarLayout = await page.locator(".calendar-panel").evaluate((panel) => {
+    const weekdayCenters = Array.from(panel.querySelectorAll(".calendar-weekdays span")).map(
+      (item) => {
+        const rect = item.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      },
+    );
+    const dayCenters = Array.from(panel.querySelectorAll(".calendar-grid .calendar-day"))
+      .slice(0, 7)
+      .map((item) => {
+        const rect = item.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      });
+    const activeDay = panel.querySelector(".calendar-day--active");
+    const inactiveDay = panel.querySelector(
+      ".calendar-day:not(.calendar-day--outside):not(.calendar-day--active)",
+    );
+    const activeDayTop = activeDay?.getBoundingClientRect().top;
+    const inactiveDayTop = inactiveDay?.getBoundingClientRect().top;
+    const activeNumberTop = activeDay
+      ?.querySelector(".calendar-day__number")
+      ?.getBoundingClientRect().top;
+    const inactiveNumberTop = inactiveDay
+      ?.querySelector(".calendar-day__number")
+      ?.getBoundingClientRect().top;
+
+    return { weekdayCenters, dayCenters, activeDayTop, inactiveDayTop, activeNumberTop, inactiveNumberTop };
+  });
+  for (const [index, weekdayCenter] of calendarLayout.weekdayCenters.entries()) {
+    expect(Math.abs(weekdayCenter - calendarLayout.dayCenters[index])).toBeLessThan(1);
+  }
+  expect(calendarLayout.activeNumberTop).toBeDefined();
+  expect(calendarLayout.inactiveNumberTop).toBeDefined();
+  expect(
+    Math.abs(
+      calendarLayout.activeNumberTop! -
+        calendarLayout.activeDayTop! -
+        (calendarLayout.inactiveNumberTop! - calendarLayout.inactiveDayTop!),
+    ),
+  ).toBeLessThan(1);
+
   const panel = page.locator(".calendar-panel");
   const panelBox = await panel.boundingBox();
   expect(panelBox).toBeTruthy();
@@ -380,10 +562,26 @@ test("可以左右滑动日历切换月份", async ({ page }) => {
   await expect(marchDay.locator(".calendar-day__title")).toHaveText("下半身");
 });
 
+test("系统暗色模式下自动切换到暗色界面", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.reload();
+
+  const colors = await page.evaluate(() => ({
+    bodyBackground: getComputedStyle(document.documentElement).backgroundImage,
+    frameBackground: getComputedStyle(document.querySelector(".app-frame")!).backgroundColor,
+    textColor: getComputedStyle(document.documentElement).color,
+  }));
+
+  expect(colors.bodyBackground).toContain("rgb(16, 22, 19)");
+  expect(colors.frameBackground).toContain("18, 24, 21");
+  expect(colors.textColor).toBe("rgb(232, 238, 233)");
+});
+
 test("可以把历史记录复制到今天", async ({ page }) => {
   const sourceRecord = {
     id: "source-2026-03-18",
     date: "2026-03-18",
+    title: "拉力日",
     updatedAt: "2026-03-18T10:00:00.000Z",
     exercises: [
       {
@@ -410,7 +608,7 @@ test("可以把历史记录复制到今天", async ({ page }) => {
 
   await page.getByRole("button", { name: "今天（复制）+" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByRole("dialog").getByRole("button", { name: "18", exact: true }).click();
+  await page.getByRole("dialog").locator(".calendar-day--active").filter({ hasText: "18" }).click();
 
   await expect(page.getByText("引体向上")).toHaveCount(2);
   const savedRecords = await page.evaluate(() =>
@@ -420,6 +618,7 @@ test("可以把历史记录复制到今天", async ({ page }) => {
   expect(savedDates).toContain(today);
   const todayRecord = savedRecords.find((record: { date: string }) => record.date === today);
   expect(todayRecord.exercises[0].name).toBe("引体向上");
+  expect(todayRecord.title).toBe("拉力日");
   expect(todayRecord.exercises[0].loadGroups[0].label).toBe("");
   expect(todayRecord.exercises[0].loadGroups[0].entries).toEqual([]);
 });
