@@ -448,7 +448,7 @@ test("运动类型可以编辑，并可按运动类型查看全部历史", async
   await page.getByRole("button", { name: "历史" }).click();
   await expect(page.locator(".date-add-button")).toHaveCount(0);
   await expect(page.locator(".entry-add-button")).toHaveCount(0);
-  await expect(page.locator(".exercise-history-button").first()).toHaveText("≡");
+  await expect(page.locator(".exercise-history-button").first()).toHaveText("★");
   await page.locator(".history-card").first().locator(".exercise-history-button").click();
 
   await expect(page.locator(".history-focus__head")).toContainText("深蹲");

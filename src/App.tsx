@@ -1223,7 +1223,7 @@ function App() {
                                         exerciseHistoryMode ? `查看${exercise.name}历史` : undefined
                                       }
                                     >
-                                      {deleteMode ? "−" : exerciseHistoryMode ? "≡" : "+"}
+                                      {deleteMode ? "−" : exerciseHistoryMode ? "★" : "+"}
                                     </button>
                                   </div>
                                   <button
