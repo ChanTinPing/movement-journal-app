@@ -1,6 +1,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type {
+  PointerEvent as ReactPointerEvent,
+  TransitionEvent as ReactTransitionEvent,
+} from "react";
 import { createBackupPayload, loadRecords, parseBackupFile, saveRecords } from "./storage";
 import { DayRecord, Exercise, LoadGroup } from "./types";
 import {
@@ -15,6 +18,17 @@ type DraftMap = Record<string, string>;
 type InsertTarget = { groupId: string; index: number } | null;
 type CalendarMode = "copy" | "history" | null;
 type DraggingExercise = { recordId: string; exerciseId: string } | null;
+type CalendarSwipeState = {
+  offsetX: number;
+  isDragging: boolean;
+  isSettling: boolean;
+};
+type CalendarSwipeSession = {
+  clientX: number;
+  clientY: number;
+  panelWidth: number;
+  isHorizontal: boolean | null;
+};
 
 type CalendarCell = {
   date: string;
@@ -27,6 +41,12 @@ const today = new Intl.DateTimeFormat("en-CA", {
 }).format(new Date());
 
 const weekLabels = ["一", "二", "三", "四", "五", "六", "日"];
+const calendarSwipeIdle: CalendarSwipeState = {
+  offsetX: 0,
+  isDragging: false,
+  isSettling: false,
+};
+const CALENDAR_SWIPE_ANIMATION_MS = 220;
 
 function buildCalendarCells(monthKey: string): CalendarCell[] {
   const [year, month] = monthKey.split("-").map(Number);
@@ -86,17 +106,28 @@ function App() {
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState<string | null>(null);
   const [calendarMode, setCalendarMode] = useState<CalendarMode>(null);
   const [calendarMonth, setCalendarMonth] = useState(today.slice(0, 7));
+  const [calendarSwipe, setCalendarSwipe] = useState<CalendarSwipeState>(calendarSwipeIdle);
   const [draggingExercise, setDraggingExercise] = useState<DraggingExercise>(null);
   const datePickerRef = useRef<HTMLInputElement | null>(null);
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const recordRefs = useRef<Record<string, HTMLElement | null>>({});
   const dragExerciseRef = useRef<DraggingExercise>(null);
-  const calendarSwipeRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const calendarSwipeRef = useRef<CalendarSwipeSession | null>(null);
+  const pendingCalendarMonthRef = useRef<string | null>(null);
+  const calendarSlideTimeoutRef = useRef<number | null>(null);
   const suppressCalendarClickRef = useRef(false);
 
   useEffect(() => {
     saveRecords(records);
   }, [records]);
+
+  useEffect(() => {
+    return () => {
+      if (calendarSlideTimeoutRef.current) {
+        window.clearTimeout(calendarSlideTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!addExerciseTarget && !addLoadTarget && !insertTarget) {
@@ -203,7 +234,10 @@ function App() {
 
   const calendarDateSet = useMemo(() => new Set(records.map((record) => record.date)), [records]);
 
-  const calendarCells = useMemo(() => buildCalendarCells(calendarMonth), [calendarMonth]);
+  const calendarSlideMonths = useMemo(
+    () => [shiftMonth(calendarMonth, -1), calendarMonth, shiftMonth(calendarMonth, 1)],
+    [calendarMonth],
+  );
 
   const recordsByDate = useMemo(() => {
     const map = new Map<string, DayRecord>();
@@ -386,15 +420,72 @@ function App() {
     setCalendarMode(null);
   }
 
+  function clearCalendarSlideTimeout() {
+    if (calendarSlideTimeoutRef.current) {
+      window.clearTimeout(calendarSlideTimeoutRef.current);
+      calendarSlideTimeoutRef.current = null;
+    }
+  }
+
+  function finishPendingCalendarSlide() {
+    const pendingMonth = pendingCalendarMonthRef.current;
+    if (!pendingMonth) {
+      return;
+    }
+
+    clearCalendarSlideTimeout();
+    pendingCalendarMonthRef.current = null;
+    setCalendarMonth(pendingMonth);
+    setCalendarSwipe({ ...calendarSwipeIdle });
+  }
+
   function startCalendarSwipe(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+    if (calendarSwipe.isSettling) {
       return;
     }
 
     calendarSwipeRef.current = {
       clientX: event.clientX,
       clientY: event.clientY,
+      panelWidth: event.currentTarget.clientWidth,
+      isHorizontal: null,
     };
+    setCalendarSwipe({ offsetX: 0, isDragging: true, isSettling: false });
+  }
+
+  function moveCalendarSwipe(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = calendarSwipeRef.current;
+    if (!start) {
+      return;
+    }
+
+    const deltaX = event.clientX - start.clientX;
+    const deltaY = event.clientY - start.clientY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+
+    if (start.isHorizontal === null) {
+      if (absX < 8 && absY < 8) {
+        return;
+      }
+      start.isHorizontal = absX > absY * 1.1;
+    }
+
+    if (!start.isHorizontal) {
+      return;
+    }
+
+    event.preventDefault();
+    if (absX > 12) {
+      suppressCalendarClickRef.current = true;
+    }
+
+    const maxOffset = start.panelWidth * 0.98;
+    const offsetX = Math.max(-maxOffset, Math.min(maxOffset, deltaX));
+    setCalendarSwipe({ offsetX, isDragging: true, isSettling: false });
   }
 
   function finishCalendarSwipe(event: ReactPointerEvent<HTMLDivElement>) {
@@ -406,16 +497,38 @@ function App() {
 
     const deltaX = event.clientX - start.clientX;
     const deltaY = event.clientY - start.clientY;
-    if (Math.abs(deltaX) < 52 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
+    const threshold = Math.max(52, start.panelWidth * 0.18);
+    if (Math.abs(deltaX) < threshold || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
+      setCalendarSwipe({ ...calendarSwipeIdle });
       return;
     }
 
     suppressCalendarClickRef.current = true;
-    setCalendarMonth((current) => shiftMonth(current, deltaX < 0 ? 1 : -1));
+    const monthOffset = deltaX < 0 ? 1 : -1;
+    pendingCalendarMonthRef.current = shiftMonth(calendarMonth, monthOffset);
+    setCalendarSwipe({
+      offsetX: monthOffset > 0 ? -start.panelWidth : start.panelWidth,
+      isDragging: false,
+      isSettling: true,
+    });
+    clearCalendarSlideTimeout();
+    calendarSlideTimeoutRef.current = window.setTimeout(
+      finishPendingCalendarSlide,
+      CALENDAR_SWIPE_ANIMATION_MS + 40,
+    );
   }
 
   function cancelCalendarSwipe() {
     calendarSwipeRef.current = null;
+    setCalendarSwipe({ ...calendarSwipeIdle });
+  }
+
+  function finishCalendarTrackTransition(event: ReactTransitionEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || event.propertyName !== "transform") {
+      return;
+    }
+
+    finishPendingCalendarSlide();
   }
 
   function selectCalendarDate(date: string, selectable: boolean) {
@@ -433,6 +546,39 @@ function App() {
     } else {
       openRecordFromCalendar(date);
     }
+  }
+
+  function renderCalendarGrid(monthKey: string) {
+    const isCurrentMonth = monthKey === calendarMonth;
+
+    return buildCalendarCells(monthKey).map((cell) => {
+      const record = recordsByDate.get(cell.date);
+      const hasRecord =
+        cell.inMonth &&
+        (calendarMode === "copy" ? copyableDateSet.has(cell.date) : calendarDateSet.has(cell.date));
+      const selectable = isCurrentMonth && hasRecord;
+
+      return (
+        <button
+          key={cell.date}
+          className={
+            hasRecord
+              ? "calendar-day calendar-day--active"
+              : cell.inMonth
+                ? "calendar-day"
+                : "calendar-day calendar-day--outside"
+          }
+          onClick={() => selectCalendarDate(cell.date, selectable)}
+          disabled={!selectable}
+          tabIndex={isCurrentMonth ? undefined : -1}
+        >
+          <span className="calendar-day__number">{cell.day}</span>
+          <span className="calendar-day__title">
+            {cell.inMonth && record?.title ? record.title : ""}
+          </span>
+        </button>
+      );
+    });
   }
 
   function copyRecordToToday(sourceDate: string) {
@@ -1602,6 +1748,7 @@ function App() {
           <div
             className="calendar-panel"
             onPointerDown={startCalendarSwipe}
+            onPointerMove={moveCalendarSwipe}
             onPointerUp={finishCalendarSwipe}
             onPointerCancel={cancelCalendarSwipe}
           >
@@ -1625,34 +1772,36 @@ function App() {
                 <span key={label}>{label}</span>
               ))}
             </div>
-            <div className="calendar-grid">
-              {calendarCells.map((cell) => {
-                const record = recordsByDate.get(cell.date);
-                const selectable =
-                  cell.inMonth &&
-                  (calendarMode === "copy"
-                    ? copyableDateSet.has(cell.date)
-                    : calendarDateSet.has(cell.date));
-                return (
-                  <button
-                    key={cell.date}
-                    className={
-                      selectable
-                        ? "calendar-day calendar-day--active"
-                        : cell.inMonth
-                          ? "calendar-day"
-                          : "calendar-day calendar-day--outside"
-                    }
-                    onClick={() => selectCalendarDate(cell.date, selectable)}
-                    disabled={!selectable}
-                  >
-                    <span className="calendar-day__number">{cell.day}</span>
-                    <span className="calendar-day__title">
-                      {cell.inMonth && record?.title ? record.title : ""}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="calendar-viewport">
+              <div
+                className={
+                  calendarSwipe.isDragging
+                    ? "calendar-track calendar-track--dragging"
+                    : "calendar-track"
+                }
+                style={{
+                  transform: `translateX(calc(-100% + ${calendarSwipe.offsetX}px))`,
+                }}
+                onTransitionEnd={finishCalendarTrackTransition}
+              >
+                {calendarSlideMonths.map((monthKey) => {
+                  const isCurrentMonth = monthKey === calendarMonth;
+
+                  return (
+                    <div
+                      className={
+                        isCurrentMonth
+                          ? "calendar-slide calendar-slide--current"
+                          : "calendar-slide"
+                      }
+                      key={monthKey}
+                      aria-hidden={!isCurrentMonth}
+                    >
+                      <div className="calendar-grid">{renderCalendarGrid(monthKey)}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <p className="calendar-tip">
               {calendarMode === "copy"

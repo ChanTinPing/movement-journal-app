@@ -308,7 +308,7 @@ test("可以编辑日期小标题，并在日历中显示", async ({ page }) => 
   await page.getByRole("button", { name: "日历" }).click();
   const activeDay = page
     .getByRole("dialog")
-    .locator(".calendar-day--active")
+    .locator(".calendar-slide--current .calendar-day--active")
     .filter({ hasText: `${Number(today.slice(8))}` });
   await expect(activeDay.locator(".calendar-day__title")).toHaveText("上半身");
 
@@ -506,15 +506,17 @@ test("可以左右滑动日历切换月份", async ({ page }) => {
         return rect.left + rect.width / 2;
       },
     );
-    const dayCenters = Array.from(panel.querySelectorAll(".calendar-grid .calendar-day"))
+    const dayCenters = Array.from(
+      panel.querySelectorAll(".calendar-slide--current .calendar-grid .calendar-day"),
+    )
       .slice(0, 7)
       .map((item) => {
         const rect = item.getBoundingClientRect();
         return rect.left + rect.width / 2;
       });
-    const activeDay = panel.querySelector(".calendar-day--active");
+    const activeDay = panel.querySelector(".calendar-slide--current .calendar-day--active");
     const inactiveDay = panel.querySelector(
-      ".calendar-day:not(.calendar-day--outside):not(.calendar-day--active)",
+      ".calendar-slide--current .calendar-day:not(.calendar-day--outside):not(.calendar-day--active)",
     );
     const activeDayTop = activeDay?.getBoundingClientRect().top;
     const inactiveDayTop = inactiveDay?.getBoundingClientRect().top;
@@ -541,8 +543,11 @@ test("可以左右滑动日历切换月份", async ({ page }) => {
   ).toBeLessThan(1);
 
   const panel = page.locator(".calendar-panel");
+  const track = page.locator(".calendar-track");
   const panelBox = await panel.boundingBox();
+  const trackBefore = await track.boundingBox();
   expect(panelBox).toBeTruthy();
+  expect(trackBefore).toBeTruthy();
   const y = panelBox!.y + panelBox!.height / 2;
   await panel.dispatchEvent("pointerdown", {
     clientX: panelBox!.x + panelBox!.width * 0.35,
@@ -550,6 +555,15 @@ test("可以左右滑动日历切换月份", async ({ page }) => {
     pointerId: 1,
     pointerType: "touch",
   });
+  await panel.dispatchEvent("pointermove", {
+    clientX: panelBox!.x + panelBox!.width * 0.58,
+    clientY: y,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+  const trackDuringDrag = await track.boundingBox();
+  expect(trackDuringDrag).toBeTruthy();
+  expect(trackDuringDrag!.x).toBeGreaterThan(trackBefore!.x + 20);
   await panel.dispatchEvent("pointerup", {
     clientX: panelBox!.x + panelBox!.width * 0.72,
     clientY: y,
@@ -558,7 +572,9 @@ test("可以左右滑动日历切换月份", async ({ page }) => {
   });
 
   await expect(page.locator(".calendar-nav strong")).toHaveText("26 年 3 月");
-  const marchDay = page.locator(".calendar-day--active").filter({ hasText: "15" });
+  const marchDay = page
+    .locator(".calendar-slide--current .calendar-day--active")
+    .filter({ hasText: "15" });
   await expect(marchDay.locator(".calendar-day__title")).toHaveText("下半身");
 });
 
@@ -608,7 +624,11 @@ test("可以把历史记录复制到今天", async ({ page }) => {
 
   await page.getByRole("button", { name: "今天（复制）+" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByRole("dialog").locator(".calendar-day--active").filter({ hasText: "18" }).click();
+  await page
+    .getByRole("dialog")
+    .locator(".calendar-slide--current .calendar-day--active")
+    .filter({ hasText: "18" })
+    .click();
 
   await expect(page.getByText("引体向上")).toHaveCount(2);
   const savedRecords = await page.evaluate(() =>
