@@ -5,8 +5,9 @@ const STORAGE_KEY = "movement-journal-records";
 const BACKUP_APP_NAME = "movement-journal";
 const TEXT_BACKUP_HEADER = [
   "# 运动日记 TXT v1",
-  "# 每行一条记录：日期 | 动作 | 类型 | 数字",
-  "# 示例：2026-04-18 | 深蹲 | 2*1.25kg | 9 / 9 / 8",
+  "# 每行一条记录：日期 | 小标题 | 动作 | 类型 | 数字",
+  "# 小标题可留空，旧格式“日期 | 动作 | 类型 | 数字”也可以导入",
+  "# 示例：2026-04-18 | 腿部日 | 深蹲 | 2*1.25kg | 9 / 9 / 8",
 ].join("\n");
 
 type BackupFile = {
@@ -101,19 +102,21 @@ function parseTextBackupFile(raw: string): DayRecord[] | null {
 
   for (const line of lines) {
     const columns = line.split("|").map((part) => part.trim());
-    if (columns[0] === "日期" && columns[1] === "动作") {
+    if (columns[0] === "日期" && (columns[1] === "动作" || columns[1] === "小标题")) {
       continue;
     }
 
-    if (columns.length !== 4) {
+    if (columns.length !== 4 && columns.length !== 5) {
       return null;
     }
 
-    const [date, exerciseName, rawLabel, rawEntries] = columns;
+    const [date, rawTitle, exerciseName, rawLabel, rawEntries] =
+      columns.length === 5 ? columns : [columns[0], "", columns[1], columns[2], columns[3]];
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !exerciseName) {
       return null;
     }
 
+    const title = rawTitle.trim();
     const label = rawLabel === "默认" ? "" : rawLabel;
     const entries = rawEntries
       .split("/")
@@ -125,10 +128,13 @@ function parseTextBackupFile(raw: string): DayRecord[] | null {
       record = {
         id: createId("day"),
         date,
+        ...(title ? { title } : {}),
         exercises: [],
         updatedAt,
       };
       recordsByDate.set(date, record);
+    } else if (title && !record.title) {
+      record.title = title;
     }
 
     let exercise = record.exercises.find((item) => item.name === exerciseName);
@@ -166,6 +172,7 @@ export function createBackupPayload(records: DayRecord[]) {
         exercise.loadGroups.map((group) =>
           [
             record.date,
+            record.title ?? "",
             exercise.name,
             group.label || "默认",
             group.entries.join(" / "),
