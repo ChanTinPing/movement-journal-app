@@ -671,6 +671,7 @@ test("可以查看运动日历，并导出导入本地备份", async ({ page }) 
   const backupRecord = {
     id: "backup-day",
     date: "2026-04-18",
+    title: "上半身",
     updatedAt: "2026-04-18T10:00:00.000Z",
     exercises: [
       {
@@ -697,7 +698,7 @@ test("可以查看运动日历，并导出导入本地备份", async ({ page }) 
 
   await page.getByRole("button", { name: "日历" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  const calendarDay = page.getByRole("dialog").getByRole("button", { name: "18", exact: true });
+  const calendarDay = page.getByRole("dialog").locator(".calendar-day--active").filter({ hasText: "18" });
   await expect(calendarDay).toHaveClass(/calendar-day--active/);
   await calendarDay.click();
   await expect(page.getByText("硬拉")).toBeVisible();
@@ -712,12 +713,14 @@ test("可以查看运动日历，并导出导入本地备份", async ({ page }) 
   const exported = await readFile(downloadPath!, "utf8");
   expect(download.suggestedFilename()).toContain(".txt");
   expect(exported).toContain("# 运动日记 TXT v1");
-  expect(exported).toContain("2026-04-18 | 硬拉 | 60kg | 5 / 5");
+  expect(exported).toContain("日期 | 小标题 | 动作 | 类型 | 数字");
+  expect(exported).toContain("2026-04-18 | 上半身 | 硬拉 | 60kg | 5 / 5");
 
   const importedRecord = {
     ...backupRecord,
     id: "imported-day",
     date: today,
+    title: "推力日",
     exercises: [
       {
         id: "imported-exercise",
@@ -740,12 +743,15 @@ test("可以查看运动日历，并导出导入本地备份", async ({ page }) 
     buffer: Buffer.from(
       [
         "# 运动日记 TXT v1",
-        "日期 | 动作 | 类型 | 数字",
-        `${importedRecord.date} | 卧推 | 40kg | 8`,
+        "日期 | 小标题 | 动作 | 类型 | 数字",
+        `${importedRecord.date} | ${importedRecord.title} | 卧推 | 40kg | 8`,
       ].join("\n"),
     ),
   });
 
   await expect(page.getByText("卧推")).toBeVisible();
+  await expect(page.locator(".date-subtitle-button")).toHaveText("推力日");
   await expect(page.getByText("硬拉")).toBeHidden();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]"));
+  expect(saved[0].title).toBe("推力日");
 });
