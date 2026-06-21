@@ -40,6 +40,9 @@ test("手机布局没有横向溢出，并暴露 PWA 安装资源", async ({ pag
 
   const serviceWorkerResponse = await page.request.get("sw.js");
   expect(serviceWorkerResponse.ok()).toBeTruthy();
+  const serviceWorker = await serviceWorkerResponse.text();
+  expect(serviceWorker).toContain("movement-journal-v2");
+  expect(serviceWorker).toContain('cache: "no-store"');
 });
 
 test("可以新增、编辑、折叠和删除训练记录", async ({ page }) => {
