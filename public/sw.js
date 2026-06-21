@@ -1,4 +1,4 @@
-const CACHE_NAME = "movement-journal-v1";
+const CACHE_NAME = "movement-journal-v2";
 const SCOPE_PATH = new URL(self.registration.scope).pathname;
 const APP_SHELL = [
   SCOPE_PATH,
@@ -9,6 +9,21 @@ const APP_SHELL = [
   `${SCOPE_PATH}icon-512.png`,
   `${SCOPE_PATH}apple-touch-icon.png`,
 ];
+
+const cacheResponse = (request, response) => {
+  if (response.ok) {
+    const copy = response.clone();
+    caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+  }
+
+  return response;
+};
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -37,13 +52,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const freshRequest = new Request(request, { cache: "no-store" });
+
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
+      fetch(freshRequest)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(`${SCOPE_PATH}index.html`, copy));
-          return response;
+          cacheResponse(`${SCOPE_PATH}index.html`, response);
+          return cacheResponse(request, response);
         })
         .catch(() => caches.match(`${SCOPE_PATH}index.html`)),
     );
@@ -51,18 +67,8 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-
-      return fetch(request).then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      });
-    }),
+    fetch(freshRequest)
+      .then((response) => cacheResponse(request, response))
+      .catch(() => caches.match(request)),
   );
 });
