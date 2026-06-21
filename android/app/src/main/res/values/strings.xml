@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">运动日记</string>
+    <string name="title_activity_main">运动日记</string>
+    <string name="package_name">com.chantinping.movementjournal</string>
+    <string name="custom_url_scheme">com.chantinping.movementjournal</string>
+</resources>

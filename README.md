@@ -43,6 +43,27 @@ iPhone Safari：打开网页后，点击分享按钮，选择“添加到主屏�
 https://chantinping.github.io/movement-journal-app/
 ```
 
+## Android App
+
+这个分支增加了 Capacitor Android 外壳，会把同一套本地 Web 应用打进 Android App。数据保存在 App 自己的本地数据里，清除浏览器数据不会影响它；但卸载 App、清除 App 数据或换手机前仍然建议先点“导出”保存备份。
+
+本地打包需要先安装 Android Studio，或安装 JDK 21、Android SDK Platform 36，并配置好 `JAVA_HOME` 和 Android SDK 环境变量。之后运行：
+
+```bash
+npm ci
+npm run android:apk
+```
+
+生成的 APK 在：
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+把这个 APK 发到手机上打开安装即可。如果手机提示不允许安装未知来源应用，需要在系统设置里允许当前文件管理器或浏览器安装未知来源应用。
+
+也可以把 `codex/android-app` 分支推到 GitHub，然后在 Actions 里运行 `Build Android APK`，下载 `movement-journal-debug-apk` artifact，里面就是可安装的 debug APK。
+
 ## 数据备份
 
 记录只保存在当前浏览器或手机主屏幕应用的本地存储里，不会上传到服务器。换手机、清浏览器数据或重装前，建议先点“导出”保存备份。
