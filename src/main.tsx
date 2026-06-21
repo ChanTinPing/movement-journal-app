@@ -1,8 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Capacitor } from "@capacitor/core";
 import App from "./App";
 import "./styles.css";
+
+type CapacitorWindow = Window & {
+  Capacitor?: {
+    isNativePlatform?: () => boolean;
+  };
+};
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -10,7 +15,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>,
 );
 
-if ("serviceWorker" in navigator && import.meta.env.PROD && !Capacitor.isNativePlatform()) {
+const isNativeCapacitor = () => {
+  const capacitor = (window as CapacitorWindow).Capacitor;
+  return capacitor?.isNativePlatform?.() === true;
+};
+
+if ("serviceWorker" in navigator && import.meta.env.PROD && !isNativeCapacitor()) {
   let didRefresh = false;
   const hadController = Boolean(navigator.serviceWorker.controller);
 
