@@ -640,6 +640,9 @@ function App() {
           dialogTitle: "导出运动日记备份",
         });
       } catch (error) {
+        if (error instanceof Error && error.message === "Share canceled") {
+          return;
+        }
         console.error("Failed to export backup", error);
         window.alert("导出失败，请重试。");
       } finally {

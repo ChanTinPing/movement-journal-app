@@ -9,7 +9,7 @@ const workspace = process.cwd();
 const sdkRoot = process.env.ANDROID_HOME ?? join(process.env.LOCALAPPDATA ?? "", "Android", "Sdk");
 const adb = process.env.ADB_PATH ?? join(sdkRoot, "platform-tools", "adb.exe");
 const apk = join(workspace, "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
-const devtoolsPort = "9223";
+let devtoolsPort = null;
 
 if (!existsSync(adb) || !existsSync(apk)) {
   throw new Error("找不到 adb 或 Debug APK；请先运行 npm run android:apk。");
@@ -49,6 +49,22 @@ function runAdb(args, options = {}) {
   return runAdbGlobal(["-s", deviceSerial, ...args], options);
 }
 
+function createDevtoolsForward(socket) {
+  const allocatedPort = runAdb(["forward", "tcp:0", `localabstract:${socket}`]);
+  if (!/^\d+$/.test(allocatedPort)) {
+    throw new Error(`ADB 没有返回有效的动态转发端口：${allocatedPort}`);
+  }
+  devtoolsPort = allocatedPort;
+}
+
+function removeDevtoolsForward() {
+  if (!devtoolsPort) {
+    return;
+  }
+  runAdb(["forward", "--remove", `tcp:${devtoolsPort}`]);
+  devtoolsPort = null;
+}
+
 async function waitFor(readValue, accepts, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   let value;
@@ -63,6 +79,9 @@ async function waitFor(readValue, accepts, timeoutMs = 15_000) {
 }
 
 async function listWebViewTargets() {
+  if (!devtoolsPort) {
+    throw new Error("Android WebView 调试端口尚未建立。");
+  }
   const response = await fetch(`http://127.0.0.1:${devtoolsPort}/json/list`);
   if (!response.ok) {
     throw new Error(`无法读取 Android WebView 调试目标：HTTP ${response.status}`);
@@ -113,7 +132,7 @@ await waitFor(
   (value) => value.includes(socket),
 );
 
-runAdb(["forward", `tcp:${devtoolsPort}`, `localabstract:${socket}`]);
+createDevtoolsForward(socket);
 
 let client;
 try {
@@ -185,7 +204,7 @@ try {
   await seedClient.close();
   console.log("Android E2E: restarting app with prepared data");
 
-  runAdb(["forward", "--remove", `tcp:${devtoolsPort}`]);
+  removeDevtoolsForward();
   runAdb(["shell", "am", "force-stop", packageName]);
   runAdb([
     "shell",
@@ -207,7 +226,7 @@ try {
     () => runAdb(["shell", "cat", "/proc/net/unix"]),
     (value) => value.includes(testSocket),
   );
-  runAdb(["forward", `tcp:${devtoolsPort}`, `localabstract:${testSocket}`]);
+  createDevtoolsForward(testSocket);
 
   console.log("Android E2E: connecting test WebView");
   const targets = await waitForWebViewTargets();
@@ -225,6 +244,11 @@ try {
   console.log("Android E2E: test WebView connected");
   const { Page, Runtime } = client;
   await Promise.all([Page.enable(), Runtime.enable()]);
+  let javascriptDialogMessage = null;
+  Page.javascriptDialogOpening((event) => {
+    javascriptDialogMessage = event.message;
+    Page.handleJavaScriptDialog({ accept: true }).catch(() => undefined);
+  });
 
   async function evaluate(expression) {
     const result = await Runtime.evaluate({ expression, awaitPromise: true, returnByValue: true });
@@ -413,12 +437,35 @@ try {
     .split(/\r?\n/)
     .find((line) => line.includes("topResumedActivity"));
 
-  console.log("Android E2E passed: 单击复制成功，原生 TXT 已生成，系统分享面板已打开。");
+  runAdb(["shell", "input", "keyevent", "KEYCODE_BACK"]);
+  await waitFor(
+    () => runAdb(["shell", "dumpsys", "activity", "activities"]),
+    (value) => {
+      const topActivity = value
+        .split(/\r?\n/)
+        .find((line) => line.includes("topResumedActivity"));
+      return topActivity?.includes(`${packageName}/.MainActivity`) === true;
+    },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  if (javascriptDialogMessage !== null) {
+    throw new Error(`取消系统分享时不应显示错误提示：${javascriptDialogMessage}`);
+  }
+  await waitForWebValue(
+    `(() => {
+      const button = [...document.querySelectorAll("button")]
+        .find((item) => item.textContent.trim() === "导出");
+      return button?.disabled === false;
+    })()`,
+    (value) => value === true,
+  );
+
+  console.log("Android E2E passed: 复制、导出和取消系统分享均成功。");
   console.log(resumedActivity?.trim() ?? "ChooserActivity detected");
 } finally {
   await client?.close();
   try {
-    runAdb(["forward", "--remove", `tcp:${devtoolsPort}`]);
+    removeDevtoolsForward();
   } catch {
     console.warn("Android E2E: failed to remove adb forward");
   }
