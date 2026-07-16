@@ -15,13 +15,38 @@ if (!existsSync(adb) || !existsSync(apk)) {
   throw new Error("找不到 adb 或 Debug APK；请先运行 npm run android:apk。");
 }
 
-function runAdb(args, options = {}) {
+function runAdbGlobal(args, options = {}) {
   return execFileSync(adb, args, {
     cwd: workspace,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     ...options,
   }).trim();
+}
+
+const connectedDevices = runAdbGlobal(["devices"])
+  .split(/\r?\n/)
+  .slice(1)
+  .map((line) => line.trim().split(/\s+/))
+  .filter((parts) => parts.length >= 2 && parts[1] === "device")
+  .map(([serial]) => serial);
+const requestedSerial = process.env.ANDROID_SERIAL;
+const emulatorSerials = connectedDevices.filter((serial) => serial.startsWith("emulator-"));
+const deviceSerial = requestedSerial ?? (emulatorSerials.length === 1 ? emulatorSerials[0] : null);
+
+if (
+  !deviceSerial ||
+  !deviceSerial.startsWith("emulator-") ||
+  !connectedDevices.includes(deviceSerial)
+) {
+  throw new Error(
+    "Android 原生 E2E 只允许在已连接的 emulator-* 模拟器上运行；不会操作真实手机。" +
+      ` 当前设备：${connectedDevices.join(", ") || "无"}`,
+  );
+}
+
+function runAdb(args, options = {}) {
+  return runAdbGlobal(["-s", deviceSerial, ...args], options);
 }
 
 async function waitFor(readValue, accepts, timeoutMs = 15_000) {
@@ -58,8 +83,13 @@ async function waitForWebViewTargets() {
   );
 }
 
+console.log(`Android E2E: using emulator ${deviceSerial}`);
 runAdb(["wait-for-device"]);
 runAdb(["install", "-r", apk]);
+const clearedAppData = runAdb(["shell", "pm", "clear", packageName]);
+if (clearedAppData !== "Success") {
+  throw new Error(`无法清空模拟器测试数据：${clearedAppData}`);
+}
 runAdb(["shell", "am", "force-stop", packageName]);
 runAdb([
   "shell",
@@ -88,6 +118,7 @@ runAdb(["forward", `tcp:${devtoolsPort}`, `localabstract:${socket}`]);
 let client;
 try {
   console.log("Android E2E: preparing native app data");
+  const exportMarker = `深蹲-Android-E2E-${Date.now()}`;
   const seedTargets = await waitForWebViewTargets();
   const seedTarget = seedTargets.find((item) => item.type === "page");
   if (!seedTarget) {
@@ -122,7 +153,7 @@ try {
       exercises: [
         {
           id: "android-e2e-older-exercise",
-          name: "深蹲",
+          name: exportMarker,
           loadGroups: [{ id: "android-e2e-older-load", label: "40kg", entries: ["8"] }],
         },
       ],
@@ -207,6 +238,41 @@ try {
     return waitFor(() => evaluate(expression), accepts, timeoutMs);
   }
 
+  const targetBounds = JSON.parse(target.description || "{}");
+  const viewport = await evaluate(`({ width: window.innerWidth, height: window.innerHeight })`);
+  const scaleX = targetBounds.width / viewport.width;
+  const scaleY = targetBounds.height / viewport.height;
+  if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY)) {
+    throw new Error("无法把 WebView 坐标换算为 Android 屏幕坐标。");
+  }
+
+  function toScreenPoint(cssX, cssY) {
+    return {
+      x: Math.round((targetBounds.screenX ?? 0) + cssX * scaleX),
+      y: Math.round((targetBounds.screenY ?? 0) + cssY * scaleY),
+    };
+  }
+
+  function tapRect(rect) {
+    const point = toScreenPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    runAdb(["shell", "input", "tap", String(point.x), String(point.y)]);
+  }
+
+  function swipeRect(rect, deltaCssX) {
+    const start = toScreenPoint(rect.x + rect.width * 0.35, rect.y + rect.height / 2);
+    const end = toScreenPoint(rect.x + rect.width * 0.35 + deltaCssX, rect.y + rect.height / 2);
+    runAdb([
+      "shell",
+      "input",
+      "swipe",
+      String(start.x),
+      String(start.y),
+      String(end.x),
+      String(end.y),
+      "220",
+    ]);
+  }
+
   await waitForWebValue("document.readyState", (value) => value === "complete");
   const preparedState = await evaluate(`(() => {
     const button = [...document.querySelectorAll("button")]
@@ -220,99 +286,103 @@ try {
     throw new Error(`Android 测试数据没有正确载入：${JSON.stringify(preparedState)}`);
   }
 
-  const copyButtonClicked = await evaluate(
+  const copyButtonRect = await waitForWebValue(
     `(() => {
       const button = [...document.querySelectorAll("button")]
         .find((item) => item.textContent.trim() === "今天（复制）+");
-      button?.click();
-      return Boolean(button);
+      return button?.getBoundingClientRect().toJSON() ?? null;
     })()`,
+    Boolean,
   );
-  if (!copyButtonClicked) {
-    throw new Error("没有找到“今天（复制）+”按钮。");
-  }
-  const panelBox = await waitForWebValue(
+  tapRect(copyButtonRect);
+  await waitForWebValue(
     `document.querySelector(".calendar-panel")?.getBoundingClientRect().toJSON() ?? null`,
     Boolean,
   );
-  if (!panelBox) {
-    throw new Error("复制日历没有打开。");
+  const calendarTipRect = await waitForWebValue(
+    `document.querySelector(".calendar-tip")?.getBoundingClientRect().toJSON() ?? null`,
+    Boolean,
+  );
+  swipeRect(calendarTipRect, 20);
+
+  const firstSourceDateRect = await waitForWebValue(
+    `(() => {
+      const button = [...document.querySelectorAll(".calendar-day--active")]
+        .find((item) => item.querySelector(".calendar-day__number")?.textContent === "18");
+      return button?.getBoundingClientRect().toJSON() ?? null;
+    })()`,
+    Boolean,
+  );
+  tapRect(firstSourceDateRect);
+  await waitForWebValue('document.querySelector("[role=dialog]") === null', (value) => value === true);
+
+  const copiedAfterLightMove = await evaluate(`(() => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
+    const records = JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]");
+    return records.find((record) => record.date === today)?.exercises.map((exercise) => exercise.name) ?? [];
+  })()`);
+  if (!copiedAfterLightMove.includes("引体向上")) {
+    throw new Error("轻微横移后首次点击没有立即复制日期。");
   }
 
-  const startX = panelBox.x + panelBox.width / 2;
-  const startY = panelBox.y + panelBox.height / 2;
-  await evaluate(`(() => {
-    const panel = document.querySelector(".calendar-panel");
-    const common = { bubbles: true, pointerId: 1, pointerType: "touch", isPrimary: true };
-    panel.dispatchEvent(new PointerEvent("pointerdown", {
-      ...common,
-      clientX: ${startX},
-      clientY: ${startY},
-    }));
-    panel.dispatchEvent(new PointerEvent("pointermove", {
-      ...common,
-      clientX: ${startX + 20},
-      clientY: ${startY + 1},
-    }));
-    panel.dispatchEvent(new PointerEvent("pointerup", {
-      ...common,
-      clientX: ${startX + 20},
-      clientY: ${startY + 1},
-    }));
-    panel.dispatchEvent(new PointerEvent("pointerdown", {
-      ...common,
-      clientX: ${startX},
-      clientY: ${startY},
-    }));
-    panel.dispatchEvent(new PointerEvent("pointermove", {
-      ...common,
-      clientX: ${startX + 100},
-      clientY: ${startY + 1},
-    }));
-    panel.dispatchEvent(new PointerEvent("pointerup", {
-      ...common,
-      clientX: ${startX + 100},
-      clientY: ${startY + 1},
-    }));
-  })()`);
+  const copyButtonRectAgain = await waitForWebValue(
+    `(() => {
+      const button = [...document.querySelectorAll("button")]
+        .find((item) => item.textContent.trim() === "今天（复制）+");
+      return button?.getBoundingClientRect().toJSON() ?? null;
+    })()`,
+    Boolean,
+  );
+  tapRect(copyButtonRectAgain);
+  await waitForWebValue('document.querySelector(".calendar-panel") !== null', (value) => value === true);
+  const calendarViewportRect = await waitForWebValue(
+    `document.querySelector(".calendar-viewport")?.getBoundingClientRect().toJSON() ?? null`,
+    Boolean,
+  );
+  swipeRect(calendarViewportRect, 100);
   await waitForWebValue(
     'document.querySelector(".calendar-nav strong")?.textContent.includes("2 月") === true',
     (value) => value === true,
   );
+  await waitForWebValue(
+    'document.querySelector(".calendar-grid-shell")?.dataset.calendarMotion === "idle"',
+    (value) => value === true,
+  );
 
-  const sourceDateClicked = await evaluate(
+  const secondSourceDateRect = await waitForWebValue(
     `(() => {
       const button = [...document.querySelectorAll(".calendar-day--active")]
         .find((item) => item.querySelector(".calendar-day__number")?.textContent === "12");
-      button?.click();
-      return Boolean(button);
+      return button?.getBoundingClientRect().toJSON() ?? null;
     })()`,
+    Boolean,
   );
-  if (!sourceDateClicked) {
-    throw new Error("没有找到可复制的 12 日。");
-  }
+  tapRect(secondSourceDateRect);
   await waitForWebValue('document.querySelector("[role=dialog]") === null', (value) => value === true);
 
-  const copiedToday = await evaluate(`(() => {
+  const copiedTodayNames = await evaluate(`(() => {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
     const records = JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]");
-    return records.filter((record) => record.date === today);
+    return records.find((record) => record.date === today)?.exercises.map((exercise) => exercise.name) ?? [];
   })()`);
-  if (copiedToday.length !== 1 || copiedToday[0].exercises[0]?.name !== "深蹲") {
-    throw new Error("单击日期后没有立即复制到今天。");
+  if (!copiedTodayNames.includes("引体向上") || !copiedTodayNames.includes(exportMarker)) {
+    throw new Error("完整滑动后首次点击没有立即复制日期。");
   }
 
-  const exportButtonClicked = await evaluate(
+  const cacheBeforeExport = runAdb(["shell", "run-as", packageName, "ls", "cache"]);
+  if (/movement-journal-backup-.*\.txt/.test(cacheBeforeExport)) {
+    throw new Error("导出前发现旧备份缓存，无法验证本次新文件。");
+  }
+
+  const exportButtonRect = await waitForWebValue(
     `(() => {
       const button = [...document.querySelectorAll("button")]
         .find((item) => item.textContent.trim() === "导出");
-      button?.click();
-      return Boolean(button);
+      return button?.getBoundingClientRect().toJSON() ?? null;
     })()`,
+    Boolean,
   );
-  if (!exportButtonClicked) {
-    throw new Error("没有找到“导出”按钮。");
-  }
+  tapRect(exportButtonRect);
   const backupFile = await waitFor(
     () => runAdb(["shell", "run-as", packageName, "ls", "cache"]),
     (value) => value.split(/\r?\n/).some((name) => /^movement-journal-backup-.*\.txt$/.test(name)),
@@ -326,7 +396,7 @@ try {
     "cat",
     `cache/${backupFile}`,
   ]);
-  if (!backupContents.includes("# 运动日记 TXT v1") || !backupContents.includes("深蹲")) {
+  if (!backupContents.includes("# 运动日记 TXT v1") || !backupContents.includes(exportMarker)) {
     throw new Error("Android 原生导出的 TXT 内容不完整。");
   }
 
@@ -347,5 +417,14 @@ try {
   console.log(resumedActivity?.trim() ?? "ChooserActivity detected");
 } finally {
   await client?.close();
-  runAdb(["forward", "--remove", `tcp:${devtoolsPort}`]);
+  try {
+    runAdb(["forward", "--remove", `tcp:${devtoolsPort}`]);
+  } catch {
+    console.warn("Android E2E: failed to remove adb forward");
+  }
+  try {
+    runAdb(["shell", "pm", "clear", packageName]);
+  } catch {
+    console.warn("Android E2E: failed to clear emulator app data");
+  }
 }
