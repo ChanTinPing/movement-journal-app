@@ -657,6 +657,7 @@ test("可以把历史记录复制到今天", async ({ page }) => {
     .filter({ hasText: "18" })
     .click();
 
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText("引体向上")).toHaveCount(2);
   const savedRecords = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]"),
@@ -668,6 +669,65 @@ test("可以把历史记录复制到今天", async ({ page }) => {
   expect(todayRecord.title).toBe("拉力日");
   expect(todayRecord.exercises[0].loadGroups[0].label).toBe("");
   expect(todayRecord.exercises[0].loadGroups[0].entries).toEqual([]);
+});
+
+test("日历中手指轻微横移后，单击日期仍会立即复制到今天", async ({ page }) => {
+  const sourceRecord = {
+    id: "touch-source-2026-03-18",
+    date: "2026-03-18",
+    updatedAt: "2026-03-18T10:00:00.000Z",
+    exercises: [
+      {
+        id: "touch-exercise-pull",
+        name: "引体向上",
+        loadGroups: [{ id: "touch-load-default", label: "", entries: ["5"] }],
+      },
+    ],
+  };
+
+  await page.evaluate(
+    ({ record }) => localStorage.setItem("movement-journal-records", JSON.stringify([record])),
+    { record: sourceRecord },
+  );
+  await page.reload();
+
+  await page.getByRole("button", { name: "今天（复制）+" }).click();
+  const panel = page.locator(".calendar-panel");
+  const panelBox = await panel.boundingBox();
+  expect(panelBox).toBeTruthy();
+
+  const startX = panelBox!.x + panelBox!.width / 2;
+  const startY = panelBox!.y + panelBox!.height / 2;
+  await panel.dispatchEvent("pointerdown", {
+    clientX: startX,
+    clientY: startY,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+  await panel.dispatchEvent("pointermove", {
+    clientX: startX + 20,
+    clientY: startY + 1,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+  await panel.dispatchEvent("pointerup", {
+    clientX: startX + 20,
+    clientY: startY + 1,
+    pointerId: 1,
+    pointerType: "touch",
+  });
+
+  await page
+    .getByRole("dialog")
+    .locator(".calendar-day--active")
+    .filter({ hasText: "18" })
+    .click();
+
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const savedRecords = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("movement-journal-records") ?? "[]"),
+  );
+  expect(savedRecords.filter((record: { date: string }) => record.date === today)).toHaveLength(1);
 });
 
 test("可以查看运动日历，并导出导入本地备份", async ({ page }) => {

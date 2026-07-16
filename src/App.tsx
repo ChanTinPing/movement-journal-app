@@ -1,5 +1,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 import type {
   AnimationEvent as ReactAnimationEvent,
   PointerEvent as ReactPointerEvent,
@@ -98,6 +101,7 @@ function App() {
   const [calendarMonth, setCalendarMonth] = useState(today.slice(0, 7));
   const [calendarMotion, setCalendarMotion] = useState<CalendarMotion>(null);
   const [draggingExercise, setDraggingExercise] = useState<DraggingExercise>(null);
+  const [exporting, setExporting] = useState(false);
   const datePickerRef = useRef<HTMLInputElement | null>(null);
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const recordRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -434,11 +438,9 @@ function App() {
       return;
     }
 
-    event.preventDefault();
-    if (absX > 12) {
-      suppressCalendarClickRef.current = true;
+    if (absX >= CALENDAR_SWIPE_THRESHOLD) {
+      event.preventDefault();
     }
-
   }
 
   function finishCalendarSwipe(event: ReactPointerEvent<HTMLDivElement>) {
@@ -455,6 +457,9 @@ function App() {
     }
 
     suppressCalendarClickRef.current = true;
+    window.setTimeout(() => {
+      suppressCalendarClickRef.current = false;
+    }, 0);
     changeCalendarMonth(deltaX < 0 ? 1 : -1);
   }
 
@@ -612,15 +617,46 @@ function App() {
     });
   }
 
-  function exportBackup() {
+  async function exportBackup() {
+    if (exporting) {
+      return;
+    }
+
     const payload = createBackupPayload(records);
+    const fileName = `movement-journal-backup-${today}.txt`;
+
+    if (Capacitor.isNativePlatform()) {
+      setExporting(true);
+      try {
+        const file = await Filesystem.writeFile({
+          path: fileName,
+          data: payload,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+        await Share.share({
+          title: "运动日记备份",
+          files: [file.uri],
+          dialogTitle: "导出运动日记备份",
+        });
+      } catch (error) {
+        console.error("Failed to export backup", error);
+        window.alert("导出失败，请重试。");
+      } finally {
+        setExporting(false);
+      }
+      return;
+    }
+
     const blob = new Blob([payload], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `movement-journal-backup-${today}.txt`;
+    link.download = fileName;
+    document.body.append(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   function openImportFile() {
@@ -1667,8 +1703,8 @@ function App() {
             <button className="tool-button" onClick={openHistoryCalendar}>
               日历
             </button>
-            <button className="tool-button" onClick={exportBackup}>
-              导出
+            <button className="tool-button" onClick={exportBackup} disabled={exporting}>
+              {exporting ? "正在导出…" : "导出"}
             </button>
             <button className="tool-button" onClick={openImportFile}>
               导入
